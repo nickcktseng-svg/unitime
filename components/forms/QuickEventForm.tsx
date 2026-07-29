@@ -40,6 +40,7 @@ export function QuickEventForm({
   students,
   makeId,
   onSave,
+  onSaveMany,
   onCancel,
   onToggleStudentPinned,
   onToggleJobPinned
@@ -51,6 +52,7 @@ export function QuickEventForm({
   students: TutorStudent[];
   makeId: (prefix: string) => string;
   onSave: (event: CalendarEvent) => void;
+  onSaveMany?: (events: CalendarEvent[]) => void;
   onCancel: () => void;
   onToggleStudentPinned?: (id: string) => void;
   onToggleJobPinned?: (id: string) => void;
@@ -99,6 +101,7 @@ export function QuickEventForm({
         selectedDate={selectedDate}
         makeId={makeId}
         onSave={onSave}
+        onSaveMany={onSaveMany}
         onCancel={onCancel}
       />
     );

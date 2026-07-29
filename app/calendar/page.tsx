@@ -33,6 +33,7 @@ export default function CalendarPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [hiddenKeys, setHiddenKeys] = useState<string[]>([]);
   const [activeEventId, setActiveEventId] = useState<string | undefined>();
+  const [editGroup, setEditGroup] = useState(false);
 
   return (
     <AppShell>
@@ -86,6 +87,7 @@ export default function CalendarPage() {
           setEditingEvent(undefined);
           setSelectedDate(date);
           setActiveEventId(undefined);
+          setEditGroup(false);
           setModalOpen(true);
         }
 
@@ -110,6 +112,7 @@ export default function CalendarPage() {
           const occurrence = expanded.find((event) => event.id === id);
           if (!occurrence) return;
           setActiveEventId(id);
+          setEditGroup(false);
           setEditingEvent(id.includes("__")
             ? {
                 ...occurrence,
@@ -146,6 +149,7 @@ export default function CalendarPage() {
         function editWholeSeries(id: string) {
           const baseId = id.split("__")[0];
           setEditingEvent(data.events.find((event) => event.id === baseId));
+          setEditGroup(false);
         }
 
         function editFutureSeries(id: string) {
@@ -163,6 +167,7 @@ export default function CalendarPage() {
                 }
               : undefined
           });
+          setEditGroup(false);
         }
 
         return (
@@ -239,6 +244,43 @@ export default function CalendarPage() {
                     這是單次例外，儲存後不會影響其他重複事件。
                   </div>
                 ) : null}
+                {editingEvent?.groupId ? (
+                  <div className="mb-3 flex flex-wrap gap-2 rounded-lg bg-ink/5 p-3 dark:bg-white/10">
+                    <Button type="button" variant={editGroup ? "secondary" : "primary"} onClick={() => setEditGroup(false)}>
+                      編輯本次
+                    </Button>
+                    <Button type="button" variant={editGroup ? "primary" : "secondary"} onClick={() => setEditGroup(true)}>
+                      編輯整組
+                    </Button>
+                    <Button type="button" variant="secondary" onClick={() => setEditingEvent(copyEventDraft(editingEvent, actions.makeId))}>
+                      複製本次
+                    </Button>
+                    <Button type="button" variant="ghost" onClick={() => cancelOccurrence(editingEvent.id)}>
+                      取消本次
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={() => {
+                        actions.deleteEvent(editingEvent.id);
+                        setModalOpen(false);
+                      }}
+                    >
+                      刪除本次
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="danger"
+                      onClick={() => {
+                        if (!window.confirm("確定刪除整組自訂日期事件？")) return;
+                        actions.deleteEventGroup(editingEvent.groupId!);
+                        setModalOpen(false);
+                      }}
+                    >
+                      刪除整組
+                    </Button>
+                  </div>
+                ) : null}
                 {activeEventId?.includes("__") ? (
                   <div className="mb-3 flex flex-wrap gap-2 rounded-lg bg-ink/5 p-3 dark:bg-white/10">
                     <Button type="button" variant="secondary" onClick={() => editOccurrence(activeEventId)}>
@@ -274,14 +316,19 @@ export default function CalendarPage() {
                       </Button>
                     </div>
                     <EventForm
-                      event={editingEvent}
+                      event={editingEvent.groupId && !editGroup ? { ...editingEvent, repeatType: "none" } : editingEvent}
                       events={data.events}
                       jobs={data.jobs}
                       students={data.students}
+                      groupEvents={editGroup && editingEvent.groupId ? data.events.filter((event) => event.groupId === editingEvent.groupId) : undefined}
                       selectedDate={selectedDate}
                       makeId={actions.makeId}
                       onSave={(event) => {
                         actions.upsertEvent(event);
+                        setModalOpen(false);
+                      }}
+                      onSaveMany={(events) => {
+                        actions.upsertEvents(events);
                         setModalOpen(false);
                       }}
                       onDelete={(id) => {
@@ -301,6 +348,10 @@ export default function CalendarPage() {
                     makeId={actions.makeId}
                     onToggleStudentPinned={actions.toggleStudentPinned}
                     onToggleJobPinned={actions.toggleJobPinned}
+                    onSaveMany={(events) => {
+                      actions.upsertEvents(events);
+                      setModalOpen(false);
+                    }}
                     onSave={(event) => {
                       actions.upsertEvent(event);
                       setModalOpen(false);

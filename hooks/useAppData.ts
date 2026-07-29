@@ -47,9 +47,34 @@ export function useAppData() {
         }));
         notify("行程已儲存");
       },
+      upsertEvents(events: CalendarEvent[]) {
+        const usedAt = events[0]?.start || new Date().toISOString();
+        setData((current) => {
+          const nextEvents = events.reduce(
+            (list, event) =>
+              list.some((item) => item.id === event.id)
+                ? list.map((item) => (item.id === event.id ? event : item))
+                : [...list, event],
+            current.events
+          );
+          const studentIds = new Set(events.map((event) => event.studentId).filter(Boolean));
+          const jobIds = new Set(events.map((event) => event.jobId).filter(Boolean));
+          return {
+            ...current,
+            events: nextEvents,
+            students: current.students.map((student) => (studentIds.has(student.id) ? { ...student, lastUsedAt: usedAt } : student)),
+            jobs: current.jobs.map((job) => (jobIds.has(job.id) ? { ...job, lastUsedAt: usedAt } : job))
+          };
+        });
+        notify("多筆行程已儲存");
+      },
       deleteEvent(id: string) {
         setData((current) => ({ ...current, events: current.events.filter((event) => event.id !== id) }));
         notify("行程已刪除");
+      },
+      deleteEventGroup(groupId: string) {
+        setData((current) => ({ ...current, events: current.events.filter((event) => event.groupId !== groupId) }));
+        notify("整組行程已刪除");
       },
       upsertCourse(course: Course) {
         setData((current) => ({

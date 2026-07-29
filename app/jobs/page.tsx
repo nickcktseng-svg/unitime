@@ -144,6 +144,10 @@ export default function JobsPage() {
                   makeId={actions.makeId}
                   onToggleStudentPinned={actions.toggleStudentPinned}
                   onToggleJobPinned={actions.toggleJobPinned}
+                  onSaveMany={(events) => {
+                    actions.upsertEvents(events);
+                    setEventModalOpen(false);
+                  }}
                   onSave={(event) => {
                     actions.upsertEvent(event);
                     setEventModalOpen(false);

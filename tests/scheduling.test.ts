@@ -13,6 +13,16 @@ import {
   createStudentEventDraft,
   quickTargets
 } from "@/lib/quick-schedule";
+import {
+  addCustomDate,
+  applyToAllOccurrences,
+  buildCustomDateEvents,
+  customDateConflicts,
+  deleteCustomGroup,
+  deleteCustomOccurrence,
+  occurrenceFromEvent,
+  summarizeCustomDateEvents
+} from "@/lib/custom-dates";
 import type { CalendarEvent, Course, Holiday, Job, Semester, TutorStudent } from "@/types";
 
 const semester: Semester = {
@@ -347,11 +357,12 @@ describe("quick calendar scheduling", () => {
   });
 
   it("copies a lesson as a draft without saving or completion state", () => {
-    const copied = copyEventDraft(paidEvent({ id: "done", status: "completed", isCompleted: true, isPaid: true }), () => "copy");
+    const copied = copyEventDraft(paidEvent({ id: "done", status: "completed", isCompleted: true, isPaid: true, groupId: "g1" }), () => "copy");
     expect(copied.id).toBe("copy");
     expect(copied.status).toBe("scheduled");
     expect(copied.isCompleted).toBe(false);
     expect(copied.isPaid).toBe(false);
+    expect(copied.groupId).toBeUndefined();
   });
 
   it("keeps income calculations working for quick-created events", () => {
@@ -364,5 +375,105 @@ describe("quick calendar scheduling", () => {
     });
     expect(summary.actualCompletedIncome).toBe(1000);
     expect(summary.estimatedIncome).toBe(1050);
+  });
+});
+
+describe("custom multi-date scheduling", () => {
+  const source = paidEvent({
+    id: "source",
+    start: "2026-07-04T19:00:00",
+    end: "2026-07-04T21:00:00",
+    status: "scheduled",
+    isCompleted: false
+  });
+
+  function threeOccurrenceEvents() {
+    const first = occurrenceFromEvent(source);
+    const occurrences = addCustomDate(addCustomDate([first], "2026-07-15", first), "2026-07-25", first);
+    return buildCustomDateEvents(source, occurrences, (prefix) => `${prefix}-${Math.random()}`, "group-1");
+  }
+
+  it("creates three non-contiguous custom date events", () => {
+    const events = threeOccurrenceEvents();
+    expect(events.map((event) => event.start.slice(0, 10))).toEqual(["2026-07-04", "2026-07-15", "2026-07-25"]);
+  });
+
+  it("uses one groupId with different event ids", () => {
+    const events = threeOccurrenceEvents();
+    expect(new Set(events.map((event) => event.groupId))).toEqual(new Set(["group-1"]));
+    expect(new Set(events.map((event) => event.id)).size).toBe(3);
+  });
+
+  it("copies the original time to every new date by default", () => {
+    const events = threeOccurrenceEvents();
+    expect(events.map((event) => event.start.slice(11, 16))).toEqual(["19:00", "19:00", "19:00"]);
+    expect(events.map((event) => event.end.slice(11, 16))).toEqual(["21:00", "21:00", "21:00"]);
+  });
+
+  it("allows 7/15 to use a different time without changing other dates", () => {
+    const first = occurrenceFromEvent(source);
+    const occurrences = addCustomDate(addCustomDate([first], "2026-07-15", first), "2026-07-25", first).map((occurrence) =>
+      occurrence.date === "2026-07-15" ? { ...occurrence, startTime: "18:30", endTime: "20:30" } : occurrence
+    );
+    const events = buildCustomDateEvents(source, occurrences, () => "event", "group-1");
+    expect(events.find((event) => event.start.startsWith("2026-07-15"))?.start.slice(11, 16)).toBe("18:30");
+    expect(events.find((event) => event.start.startsWith("2026-07-04"))?.start.slice(11, 16)).toBe("19:00");
+    expect(events.find((event) => event.start.startsWith("2026-07-25"))?.start.slice(11, 16)).toBe("19:00");
+  });
+
+  it("deletes one occurrence without deleting the whole group", () => {
+    const events = threeOccurrenceEvents();
+    const remaining = deleteCustomOccurrence(events, events[1].id);
+    expect(remaining).toHaveLength(2);
+    expect(remaining.every((event) => event.groupId === "group-1")).toBe(true);
+  });
+
+  it("deletes a whole custom group", () => {
+    expect(deleteCustomGroup(threeOccurrenceEvents(), "group-1")).toHaveLength(0);
+  });
+
+  it("keeps income independent when one custom occurrence is cancelled", () => {
+    const events = threeOccurrenceEvents().map((event, index) =>
+      index === 1
+        ? { ...event, status: "student_cancelled" as const, chargeOnCancellation: false, isCompleted: false }
+        : { ...event, status: "completed" as const, isCompleted: true }
+    );
+    const summary = calculateMonthlyIncome(events, [job], "2026-07", {
+      includeClassTime: true,
+      includePrepTime: false,
+      includeCommuteTime: false,
+      includeReportTime: false
+    });
+    expect(summary.actualCompletedIncome).toBe(2000);
+    expect(summary.cancellationLoss).toBe(1000);
+  });
+
+  it("batch applies only when explicitly called", () => {
+    const first = occurrenceFromEvent(source);
+    const occurrences = addCustomDate([first], "2026-07-15", first);
+    const untouched = occurrences.map((occurrence) => occurrence.startTime);
+    const applied = applyToAllOccurrences(occurrences, { startTime: "18:00" });
+    expect(untouched).toEqual(["19:00", "19:00"]);
+    expect(applied.map((occurrence) => occurrence.startTime)).toEqual(["18:00", "18:00"]);
+  });
+
+  it("checks conflicts per occurrence", () => {
+    const events = threeOccurrenceEvents();
+    const existing = paidEvent({ id: "busy", title: "既有事件", start: "2026-07-15T19:30:00", end: "2026-07-15T20:00:00" });
+    const conflicts = customDateConflicts(events, [existing]);
+    expect(conflicts.map((item) => item.conflicts.length)).toEqual([0, 1, 0]);
+  });
+
+  it("summarizes custom date hours and estimated income", () => {
+    const summary = summarizeCustomDateEvents(threeOccurrenceEvents());
+    expect(summary.count).toBe(3);
+    expect(summary.totalHours).toBe(6);
+    expect(summary.estimatedIncome).toBe(3000);
+  });
+
+  it("migrates legacy events without custom group fields", () => {
+    const migrated = migrateAppData({ events: [source], students: [], jobs: [], courses: [] });
+    expect(migrated.events[0].repeatType).toBe("none");
+    expect(migrated.events[0].groupId).toBeUndefined();
   });
 });

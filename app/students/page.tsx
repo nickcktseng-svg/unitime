@@ -189,6 +189,10 @@ export default function StudentsPage() {
                   makeId={actions.makeId}
                   onToggleStudentPinned={actions.toggleStudentPinned}
                   onToggleJobPinned={actions.toggleJobPinned}
+                  onSaveMany={(events) => {
+                    actions.upsertEvents(events);
+                    setLessonModalOpen(false);
+                  }}
                   onSave={(event) => {
                     actions.upsertEvent(event);
                     setLessonModalOpen(false);

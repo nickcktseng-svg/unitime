@@ -16,6 +16,8 @@ export type JobType = "tutoring" | "internship" | "cram_school" | "lab" | "food"
 
 export type ScheduleMode = "weekly" | "biweekly" | "irregular" | "single";
 
+export type RepeatType = "none" | "weekly" | "biweekly" | "custom_dates";
+
 export type EventStatus =
   | "scheduled"
   | "completed"
@@ -43,6 +45,7 @@ export type CalendarEvent = {
   end: string;
   location: string;
   notes: string;
+  repeatType?: RepeatType;
   repeatRule?: RepeatRule;
   countsForIncome: boolean;
   hourlyRate?: number;
@@ -55,6 +58,10 @@ export type CalendarEvent = {
   courseId?: string;
   semesterId?: string;
   seriesId?: string;
+  groupId?: string;
+  customOccurrenceId?: string;
+  sourceEventId?: string;
+  isCustomOccurrence?: boolean;
   isException?: boolean;
   originalEventDate?: string;
   overrideFields?: Record<string, unknown>;
