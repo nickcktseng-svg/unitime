@@ -1,0 +1,64 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+.dark {
+  color-scheme: dark;
+}
+
+body {
+  background: #f7f4ed;
+  color: #172026;
+}
+
+.dark body {
+  background: #111817;
+  color: #f5f0e8;
+}
+
+.fc {
+  --fc-border-color: rgba(96, 111, 113, 0.24);
+  --fc-today-bg-color: rgba(66, 184, 131, 0.13);
+  --fc-page-bg-color: transparent;
+  --fc-neutral-bg-color: transparent;
+  font-size: 0.9rem;
+}
+
+.fc .fc-toolbar-title {
+  font-size: 1.15rem;
+  font-weight: 800;
+}
+
+.fc .fc-button-primary {
+  background: #172026;
+  border-color: #172026;
+  border-radius: 8px;
+}
+
+.dark .fc .fc-button-primary {
+  background: #f5f0e8;
+  border-color: #f5f0e8;
+  color: #172026;
+}
+
+.fc-event {
+  border: 0;
+  border-radius: 7px;
+  padding: 2px 4px;
+}
+
+input,
+select,
+textarea {
+  color-scheme: light;
+}
+
+.dark input,
+.dark select,
+.dark textarea {
+  color-scheme: dark;
+}
