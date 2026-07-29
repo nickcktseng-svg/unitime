@@ -12,7 +12,7 @@ export type EventCategory =
   | "rest"
   | "other";
 
-export type JobType = "tutoring" | "cram_school" | "lab" | "food" | "admin" | "other";
+export type JobType = "tutoring" | "internship" | "cram_school" | "lab" | "food" | "admin" | "other";
 
 export type ScheduleMode = "weekly" | "biweekly" | "irregular" | "single";
 
@@ -122,6 +122,8 @@ export type Job = {
   fixedPay?: number;
   reportBonus?: number;
   extraBonus?: number;
+  defaultFixedPay?: number;
+  defaultBonus?: number;
   defaultDurationMinutes?: number;
   defaultHourlyRate?: number;
   scheduleMode?: ScheduleMode;
@@ -135,6 +137,8 @@ export type Job = {
   contactInfo: string;
   payday: string;
   isActive: boolean;
+  isPinned?: boolean;
+  lastUsedAt?: string;
   notes: string;
   color: string;
   studentName?: string;
@@ -170,8 +174,12 @@ export type TutorStudent = {
   hourlyRate: number;
   defaultHourlyRate?: number;
   defaultDurationMinutes?: number;
+  defaultBonus?: number;
   color?: string;
+  location?: string;
   isActive?: boolean;
+  isPinned?: boolean;
+  lastUsedAt?: string;
   scheduleMode?: ScheduleMode;
   scheduleWeekday?: number;
   scheduleStartTime?: string;

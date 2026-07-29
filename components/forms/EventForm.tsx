@@ -1,6 +1,6 @@
 "use client";
 
-import { format, parseISO } from "date-fns";
+import { addMinutes, format, parseISO } from "date-fns";
 import { useMemo, useState } from "react";
 import type { CalendarEvent, EventCategory, EventStatus, Job, TutorStudent } from "@/types";
 import { findEventConflicts } from "@/lib/conflict-check";
@@ -53,14 +53,15 @@ const statusLabels: Record<EventStatus, string> = {
 };
 
 function fromEvent(event?: CalendarEvent, selectedDate = today): EventDraft {
-  const start = event ? parseISO(event.start) : new Date(`${selectedDate}T09:00:00`);
-  const end = event ? parseISO(event.end) : new Date(`${selectedDate}T10:00:00`);
+  const selectedStart = selectedDate.includes("T") ? selectedDate : `${selectedDate}T09:00:00`;
+  const start = event ? parseISO(event.start) : new Date(selectedStart);
+  const end = event ? parseISO(event.end) : addMinutes(start, 60);
   return {
     title: event?.title ?? "",
     category: event?.category ?? "personal",
     date: format(start, "yyyy-MM-dd"),
     startTime: format(start, "HH:mm"),
-    endTime: format(end, "HH:mm"),
+    endTime: format(event ? end : addMinutes(start, 60), "HH:mm"),
     location: event?.location ?? "",
     notes: event?.notes ?? "",
     repeatEnabled: event?.repeatRule?.enabled ?? false,
@@ -164,28 +165,51 @@ export function EventForm({
 
   function updateStudent(studentId: string) {
     const student = students.find((item) => item.id === studentId);
+    const durationMinutes = student?.defaultDurationMinutes ?? 120;
+    const start = toDateTime(draft.date, draft.startTime);
     setDraft({
       ...draft,
       studentId,
+      jobId: student?.jobId ?? "",
       category: studentId ? "tutoring" : draft.category,
-      title: !draft.title && student ? `${student.displayName || student.name}家教` : draft.title,
+      title: student ? `${student.displayName || student.name}家教` : draft.title,
+      endTime: student ? format(addMinutes(parseISO(start), durationMinutes), "HH:mm") : draft.endTime,
       hourlyRate: student?.defaultHourlyRate ?? student?.hourlyRate ?? draft.hourlyRate,
-      location: draft.location,
+      fixedPay: 0,
+      bonus: student?.defaultBonus ?? 0,
+      bonusEligible: Boolean(student?.defaultBonus),
+      location: student?.location ?? draft.location,
+      notes: student?.notes ?? draft.notes,
       countsForIncome: studentId ? true : draft.countsForIncome
     });
   }
 
   function updateJob(jobId: string) {
     const job = jobs.find((item) => item.id === jobId);
+    const durationMinutes = job?.defaultDurationMinutes ?? Math.round((job?.fixedHours ?? 1) * 60);
+    const start = toDateTime(draft.date, draft.startTime);
     setDraft({
       ...draft,
       jobId,
-      title: !draft.title && job ? job.name : draft.title,
-      category: job?.type === "tutoring" ? "tutoring" : job?.type === "lab" ? "lab" : job?.type === "cram_school" ? "cram_school" : draft.category,
+      studentId: "",
+      title: job ? job.name : draft.title,
+      category:
+        job?.type === "tutoring"
+          ? "tutoring"
+          : job?.type === "internship" || job?.type === "lab"
+            ? "lab"
+            : job?.type === "cram_school"
+              ? "cram_school"
+              : job?.type === "food" || job?.type === "admin"
+                ? "part_time"
+                : draft.category,
+      endTime: job ? format(addMinutes(parseISO(start), durationMinutes), "HH:mm") : draft.endTime,
       hourlyRate: job?.defaultHourlyRate ?? job?.hourlyRate ?? draft.hourlyRate,
-      fixedPay: job?.fixedPay ?? draft.fixedPay,
-      bonus: job?.reportBonus ?? draft.bonus,
-      bonusEligible: Boolean(job?.reportBonus) || draft.bonusEligible,
+      fixedPay: job?.defaultFixedPay ?? job?.fixedPay ?? 0,
+      bonus: job?.defaultBonus ?? job?.reportBonus ?? 0,
+      bonusEligible: Boolean(job?.defaultBonus ?? job?.reportBonus),
+      location: job?.location ?? draft.location,
+      notes: job?.notes ?? draft.notes,
       countsForIncome: jobId ? true : draft.countsForIncome
     });
   }
@@ -475,7 +499,7 @@ export function EventForm({
           </>
         ) : null}
       </div>
-      <div className="flex flex-wrap justify-end gap-2">
+      <div className="sticky bottom-0 -mx-1 flex flex-wrap justify-end gap-2 bg-paper/95 px-1 py-3 backdrop-blur dark:bg-ink/95">
         {event && onDelete ? (
           <Button
             type="button"

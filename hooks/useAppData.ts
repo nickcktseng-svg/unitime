@@ -32,11 +32,18 @@ export function useAppData() {
   const actions = useMemo(
     () => ({
       upsertEvent(event: CalendarEvent) {
+        const usedAt = event.start || new Date().toISOString();
         setData((current) => ({
           ...current,
           events: current.events.some((item) => item.id === event.id)
             ? current.events.map((item) => (item.id === event.id ? event : item))
-            : [...current.events, event]
+            : [...current.events, event],
+          students: event.studentId
+            ? current.students.map((student) => (student.id === event.studentId ? { ...student, lastUsedAt: usedAt } : student))
+            : current.students,
+          jobs: event.jobId
+            ? current.jobs.map((job) => (job.id === event.jobId ? { ...job, lastUsedAt: usedAt } : job))
+            : current.jobs
         }));
         notify("行程已儲存");
       },
@@ -69,6 +76,13 @@ export function useAppData() {
       deleteJob(id: string) {
         setData((current) => ({ ...current, jobs: current.jobs.filter((job) => job.id !== id) }));
         notify("工作已刪除");
+      },
+      toggleJobPinned(id: string) {
+        setData((current) => ({
+          ...current,
+          jobs: current.jobs.map((job) => (job.id === id ? { ...job, isPinned: !job.isPinned } : job))
+        }));
+        notify("常用工作已更新");
       },
       upsertSemester(semester: Semester) {
         setData((current) => ({
@@ -104,6 +118,13 @@ export function useAppData() {
             : [...current.students, student]
         }));
         notify("學生資料已儲存");
+      },
+      toggleStudentPinned(id: string) {
+        setData((current) => ({
+          ...current,
+          students: current.students.map((student) => (student.id === id ? { ...student, isPinned: !student.isPinned } : student))
+        }));
+        notify("常用學生已更新");
       },
       updateSettings(settings: UserSettings) {
         setData((current) => ({ ...current, settings }));

@@ -13,8 +13,10 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Modal } from "@/components/ui/Modal";
 import { EventForm } from "@/components/forms/EventForm";
+import { QuickEventForm } from "@/components/forms/QuickEventForm";
 import { categoryMeta } from "@/lib/sample-data";
 import { expandRecurringEvents } from "@/hooks/useCalendarEvents";
+import { copyEventDraft } from "@/lib/quick-schedule";
 import type { CalendarEvent, EventStatus } from "@/types";
 
 function statusIcon(status?: EventStatus) {
@@ -186,12 +188,14 @@ export default function CalendarPage() {
                 nowIndicator
                 editable
                 selectable
+                selectLongPressDelay={350}
                 allDaySlot
                 height="auto"
                 slotMinTime="08:00:00"
                 slotMaxTime="23:00:00"
                 events={[...holidayEvents, ...fcEvents]}
-                dateClick={(arg: DateClickArg) => openNew(arg.dateStr.slice(0, 10))}
+                dateClick={(arg: DateClickArg) => openNew(arg.dateStr)}
+                select={(arg) => openNew(arg.startStr)}
                 eventClick={(arg: EventClickArg) => {
                   if (arg.event.id.startsWith("holiday-")) return;
                   editOccurrence(arg.event.id);
@@ -262,26 +266,57 @@ export default function CalendarPage() {
                     </Button>
                   </div>
                 ) : null}
-                <EventForm
-                  event={editingEvent}
-                  events={data.events}
-                  jobs={data.jobs}
-                  students={data.students}
-                  selectedDate={selectedDate}
-                  makeId={actions.makeId}
-                  onSave={(event) => {
-                    actions.upsertEvent(event);
-                    setModalOpen(false);
-                  }}
-                  onDelete={(id) => {
-                    const baseId = id.split("__")[0];
-                    actions.deleteEvent(baseId);
-                    setModalOpen(false);
-                  }}
-                  onCancel={() => setModalOpen(false)}
-                />
+                {editingEvent ? (
+                  <>
+                    <div className="mb-3 flex justify-end">
+                      <Button type="button" variant="secondary" onClick={() => setEditingEvent(copyEventDraft(editingEvent, actions.makeId))}>
+                        複製這次
+                      </Button>
+                    </div>
+                    <EventForm
+                      event={editingEvent}
+                      events={data.events}
+                      jobs={data.jobs}
+                      students={data.students}
+                      selectedDate={selectedDate}
+                      makeId={actions.makeId}
+                      onSave={(event) => {
+                        actions.upsertEvent(event);
+                        setModalOpen(false);
+                      }}
+                      onDelete={(id) => {
+                        const baseId = id.split("__")[0];
+                        actions.deleteEvent(baseId);
+                        setModalOpen(false);
+                      }}
+                      onCancel={() => setModalOpen(false)}
+                    />
+                  </>
+                ) : (
+                  <QuickEventForm
+                    selectedDate={selectedDate}
+                    events={data.events}
+                    jobs={data.jobs}
+                    students={data.students}
+                    makeId={actions.makeId}
+                    onToggleStudentPinned={actions.toggleStudentPinned}
+                    onToggleJobPinned={actions.toggleJobPinned}
+                    onSave={(event) => {
+                      actions.upsertEvent(event);
+                      setModalOpen(false);
+                    }}
+                    onCancel={() => setModalOpen(false)}
+                  />
+                )}
               </Modal>
             ) : null}
+            <button
+              className="fixed bottom-5 right-5 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-ink text-2xl font-black text-white shadow-xl md:hidden dark:bg-paper dark:text-ink"
+              aria-label="快速新增"
+              onClick={() => openNew()}
+            >
+              +
+            </button>
           </div>
         );
       }}

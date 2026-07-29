@@ -7,6 +7,12 @@ import {
   groupIncomeBySource
 } from "@/lib/calculations";
 import { migrateAppData } from "@/lib/migrations";
+import {
+  copyEventDraft,
+  createJobEventDraft,
+  createStudentEventDraft,
+  quickTargets
+} from "@/lib/quick-schedule";
 import type { CalendarEvent, Course, Holiday, Job, Semester, TutorStudent } from "@/types";
 
 const semester: Semester = {
@@ -83,7 +89,9 @@ const student: TutorStudent = {
   hourlyRate: 500,
   defaultHourlyRate: 500,
   defaultDurationMinutes: 120,
+  defaultBonus: 50,
   color: "#ef4444",
+  location: "板橋",
   isActive: true,
   scheduleMode: "irregular",
   parentContact: "",
@@ -262,5 +270,99 @@ describe("migration compatibility", () => {
     expect(expanded.some((event) => event.id === "cancelled-once")).toBe(true);
     expect(expanded.some((event) => event.id === "series-cancel__2026-07-01")).toBe(true);
     expect(expanded.some((event) => event.id === "series-cancel__2026-07-15")).toBe(true);
+  });
+});
+
+describe("quick calendar scheduling", () => {
+  it("stores students without fixed schedule settings", () => {
+    const migrated = migrateAppData({
+      students: [{ id: "s", name: "瀚翔", subject: "數學", hourlyRate: 500, defaultDurationMinutes: 120 }],
+      jobs: [],
+      events: [],
+      courses: []
+    });
+    expect(migrated.students[0].name).toBe("瀚翔");
+    expect(migrated.students[0].scheduleMode).toBe("irregular");
+    expect(migrated.students[0].defaultDurationMinutes).toBe(120);
+  });
+
+  it("stores jobs without fixed work schedule settings", () => {
+    const migrated = migrateAppData({
+      jobs: [{ id: "j", name: "得霖實習", type: "internship", hourlyRate: 220, fixedHours: 2 }],
+      students: [],
+      events: [],
+      courses: []
+    });
+    expect(migrated.jobs[0].name).toBe("得霖實習");
+    expect(migrated.jobs[0].scheduleMode).toBe("irregular");
+    expect(migrated.jobs[0].defaultHourlyRate).toBe(220);
+  });
+
+  it("creates a quick student draft with defaults", () => {
+    const draft = createStudentEventDraft(student, () => "event-new", "2026-09-15T18:00:00");
+    expect(draft.studentId).toBe(student.id);
+    expect(draft.category).toBe("tutoring");
+    expect(draft.hourlyRate).toBe(500);
+    expect(draft.bonus).toBe(50);
+    expect(draft.color).toBe("#ef4444");
+    expect(draft.location).toBe("板橋");
+  });
+
+  it("creates a quick job draft with pay defaults", () => {
+    const draft = createJobEventDraft(
+      { ...job, type: "internship", defaultHourlyRate: 320, defaultDurationMinutes: 180, defaultFixedPay: 1200, defaultBonus: 100 },
+      () => "event-job",
+      "2026-09-15T18:00:00"
+    );
+    expect(draft.jobId).toBe(job.id);
+    expect(draft.category).toBe("lab");
+    expect(draft.hourlyRate).toBe(320);
+    expect(draft.fixedPay).toBe(1200);
+    expect(draft.bonus).toBe(100);
+  });
+
+  it("defaults an 18:00 two-hour lesson to 20:00", () => {
+    const draft = createStudentEventDraft(student, () => "event-new", "2026-09-15T18:00:00");
+    expect(draft.start).toBe("2026-09-15T18:00:00");
+    expect(draft.end).toBe("2026-09-15T20:00:00");
+  });
+
+  it("does not mutate student defaults when one event changes hourly rate", () => {
+    const draft = createStudentEventDraft(student, () => "event-new", "2026-09-15T18:00:00");
+    const changed = { ...draft, hourlyRate: 550 };
+    expect(changed.hourlyRate).toBe(550);
+    expect(student.defaultHourlyRate).toBe(500);
+  });
+
+  it("sorts pinned targets before recently used and names", () => {
+    const sorted = quickTargets(
+      [
+        { ...student, id: "student-old", name: "歐陽", displayName: "歐陽", isPinned: false, lastUsedAt: "2026-07-01T10:00:00" },
+        { ...student, id: "student-pin", name: "瀚翔", displayName: "瀚翔", isPinned: true, lastUsedAt: "2026-06-01T10:00:00" }
+      ],
+      [{ ...job, id: "job-recent", name: "得霖實習", lastUsedAt: "2026-07-20T10:00:00" }]
+    );
+    expect(sorted[0].id).toBe("student-pin");
+    expect(sorted[1].id).toBe("job-recent");
+  });
+
+  it("copies a lesson as a draft without saving or completion state", () => {
+    const copied = copyEventDraft(paidEvent({ id: "done", status: "completed", isCompleted: true, isPaid: true }), () => "copy");
+    expect(copied.id).toBe("copy");
+    expect(copied.status).toBe("scheduled");
+    expect(copied.isCompleted).toBe(false);
+    expect(copied.isPaid).toBe(false);
+  });
+
+  it("keeps income calculations working for quick-created events", () => {
+    const draft = { ...createStudentEventDraft(student, () => "event-new", "2026-07-15T18:00:00"), status: "completed" as const, isCompleted: true };
+    const summary = calculateMonthlyIncome([draft], [job], "2026-07", {
+      includeClassTime: true,
+      includePrepTime: false,
+      includeCommuteTime: false,
+      includeReportTime: false
+    });
+    expect(summary.actualCompletedIncome).toBe(1000);
+    expect(summary.estimatedIncome).toBe(1050);
   });
 });

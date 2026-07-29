@@ -1,7 +1,7 @@
 "use client";
 
-import { addMinutes, format, isAfter, parseISO } from "date-fns";
-import { CalendarPlus, Pencil, Slash } from "lucide-react";
+import { isAfter, parseISO } from "date-fns";
+import { CalendarPlus, Pencil, Slash, Star } from "lucide-react";
 import { useState } from "react";
 import { AppShell } from "@/components/layout/AppShell";
 import { Button } from "@/components/ui/Button";
@@ -9,37 +9,14 @@ import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Modal } from "@/components/ui/Modal";
 import { StudentForm } from "@/components/forms/StudentForm";
-import { EventForm } from "@/components/forms/EventForm";
+import { QuickEventForm } from "@/components/forms/QuickEventForm";
 import { calculateMonthlyIncome } from "@/lib/calculations";
 import { currentMonth, formatDateTime } from "@/lib/date-utils";
 import { expandRecurringEvents } from "@/lib/calendar-expansion";
+import { createStudentEventDraft } from "@/lib/quick-schedule";
 import type { CalendarEvent, TutorStudent } from "@/types";
 
 const money = (value: number) => `NT$ ${Math.round(value).toLocaleString()}`;
-
-function lessonDraft(student: TutorStudent, makeId: (prefix: string) => string): CalendarEvent {
-  const start = new Date();
-  const minutes = student.defaultDurationMinutes ?? 120;
-  return {
-    id: makeId("event"),
-    title: `${student.displayName || student.name}家教`,
-    category: "tutoring",
-    start: format(start, "yyyy-MM-dd'T'18:00:00"),
-    end: format(addMinutes(new Date(`${format(start, "yyyy-MM-dd")}T18:00:00`), minutes), "yyyy-MM-dd'T'HH:mm:ss"),
-    location: "",
-    notes: student.notes,
-    countsForIncome: true,
-    hourlyRate: student.defaultHourlyRate ?? student.hourlyRate,
-    studentId: student.id,
-    jobId: student.jobId,
-    status: "scheduled",
-    color: student.color,
-    bonusEligible: false,
-    bonusReceived: false,
-    isCompleted: false,
-    isPaid: false
-  };
-}
 
 export default function StudentsPage() {
   const [editingStudent, setEditingStudent] = useState<TutorStudent | undefined>();
@@ -135,6 +112,14 @@ export default function StudentsPage() {
                           <p className="font-black">{((student.defaultDurationMinutes ?? 120) / 60).toFixed(1)} 小時</p>
                         </div>
                         <div className="rounded-lg bg-ink/5 p-3 dark:bg-white/10">
+                          <p className="text-ink/55 dark:text-white/55">預設獎金</p>
+                          <p className="font-black">{money(student.defaultBonus ?? 0)}</p>
+                        </div>
+                        <div className="rounded-lg bg-ink/5 p-3 dark:bg-white/10">
+                          <p className="text-ink/55 dark:text-white/55">地點</p>
+                          <p className="truncate font-black">{student.location || "未填"}</p>
+                        </div>
+                        <div className="rounded-lg bg-ink/5 p-3 dark:bg-white/10">
                           <p className="text-ink/55 dark:text-white/55">本月次數</p>
                           <p className="font-black">{monthly.records.filter((record) => record.status === "completed").length} 次</p>
                         </div>
@@ -159,9 +144,12 @@ export default function StudentsPage() {
                         >
                           <Pencil size={16} /> 編輯
                         </Button>
+                        <Button variant="ghost" onClick={() => actions.toggleStudentPinned(student.id)}>
+                          <Star size={16} fill={student.isPinned ? "currentColor" : "none"} /> {student.isPinned ? "已釘選" : "釘選"}
+                        </Button>
                         <Button
                           onClick={() => {
-                            setLessonEvent(lessonDraft(student, actions.makeId));
+                            setLessonEvent(createStudentEventDraft(student, actions.makeId));
                             setLessonModalOpen(true);
                           }}
                         >
@@ -193,12 +181,14 @@ export default function StudentsPage() {
             ) : null}
             {lessonModalOpen && lessonEvent ? (
               <Modal title="新增一堂課" onClose={() => setLessonModalOpen(false)}>
-                <EventForm
-                  event={lessonEvent}
+                <QuickEventForm
+                  initialEvent={lessonEvent}
                   events={data.events}
                   jobs={data.jobs}
                   students={data.students}
                   makeId={actions.makeId}
+                  onToggleStudentPinned={actions.toggleStudentPinned}
+                  onToggleJobPinned={actions.toggleJobPinned}
                   onSave={(event) => {
                     actions.upsertEvent(event);
                     setLessonModalOpen(false);

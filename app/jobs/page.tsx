@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarPlus, Pencil, Plus, Trash2 } from "lucide-react";
+import { CalendarPlus, Pencil, Plus, Star, Trash2 } from "lucide-react";
 import { format, isAfter, parseISO } from "date-fns";
 import { useState } from "react";
 import { AppShell } from "@/components/layout/AppShell";
@@ -9,22 +9,17 @@ import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Modal } from "@/components/ui/Modal";
 import { JobForm } from "@/components/forms/JobForm";
+import { QuickEventForm } from "@/components/forms/QuickEventForm";
 import { calculateEffectiveHourlyRate, calculateMonthlyIncome } from "@/lib/calculations";
 import { currentMonth } from "@/lib/date-utils";
-import type { Job } from "@/types";
-
-const typeLabels = {
-  tutoring: "家教",
-  cram_school: "補習班",
-  lab: "實驗室工讀",
-  food: "餐飲",
-  admin: "行政",
-  other: "其他"
-};
+import { createJobEventDraft, jobTypeLabels } from "@/lib/quick-schedule";
+import type { CalendarEvent, Job } from "@/types";
 
 export default function JobsPage() {
   const [editingJob, setEditingJob] = useState<Job | undefined>();
   const [modalOpen, setModalOpen] = useState(false);
+  const [eventModalOpen, setEventModalOpen] = useState(false);
+  const [jobEvent, setJobEvent] = useState<CalendarEvent | undefined>();
   const [query, setQuery] = useState("");
 
   return (
@@ -37,7 +32,7 @@ export default function JobsPage() {
           includeReportTime: data.settings.includeReportTimeInEffectiveRate
         };
         const monthIncome = calculateMonthlyIncome(data.events, data.jobs, currentMonth(), options);
-        const filteredJobs = data.jobs.filter((job) => `${job.name}${job.location}${typeLabels[job.type]}`.includes(query));
+        const filteredJobs = data.jobs.filter((job) => `${job.name}${job.location}${jobTypeLabels[job.type]}`.includes(query));
 
         return (
           <div className="grid gap-5">
@@ -84,7 +79,7 @@ export default function JobsPage() {
                             <span className="h-3 w-3 rounded-full" style={{ backgroundColor: job.color }} />
                             <h3 className="truncate text-lg font-black">{job.name}</h3>
                           </div>
-                          <p className="mt-1 text-sm text-ink/60 dark:text-white/60">{typeLabels[job.type]} / {job.location}</p>
+                          <p className="mt-1 text-sm text-ink/60 dark:text-white/60">{jobTypeLabels[job.type]} / {job.location}</p>
                         </div>
                         <div className="flex gap-1">
                           <Button title="編輯" aria-label="編輯" variant="ghost" onClick={() => { setEditingJob(job); setModalOpen(true); }}>
@@ -96,18 +91,31 @@ export default function JobsPage() {
                         </div>
                       </div>
                       <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
-                        <p className="rounded-lg bg-ink/5 p-2 dark:bg-white/10">時薪<br /><b>NT$ {job.hourlyRate}</b></p>
+                        <p className="rounded-lg bg-ink/5 p-2 dark:bg-white/10">預設時薪<br /><b>NT$ {job.defaultHourlyRate ?? job.hourlyRate}</b></p>
+                        <p className="rounded-lg bg-ink/5 p-2 dark:bg-white/10">單次時數<br /><b>{((job.defaultDurationMinutes ?? Math.round(job.fixedHours * 60)) / 60).toFixed(1)} 小時</b></p>
                         <p className="rounded-lg bg-ink/5 p-2 dark:bg-white/10">本月工時<br /><b>{monthHours.toFixed(1)} 小時</b></p>
                         <p className="rounded-lg bg-ink/5 p-2 dark:bg-white/10">本月收入<br /><b>NT$ {Math.round(income).toLocaleString()}</b></p>
                         <p className="rounded-lg bg-ink/5 p-2 dark:bg-white/10">有效時薪<br /><b>NT$ {Math.round(effectiveRate)}</b></p>
+                        <p className="rounded-lg bg-ink/5 p-2 dark:bg-white/10">預設獎金<br /><b>NT$ {job.defaultBonus ?? job.reportBonus ?? 0}</b></p>
                       </div>
                       <div className="mt-3 rounded-lg bg-mint/10 p-3 text-sm">
-                        <p className="font-bold">固定排程：{job.weeklySchedule || "尚未設定"}</p>
                         <p className="mt-1">下一次：{nextShift ? format(parseISO(nextShift.start), "MM/dd HH:mm") : "尚未安排"}</p>
+                        <p className="mt-1">發薪日：{job.payday || "未設定"}</p>
                       </div>
-                      <Button className="mt-3 w-full" variant="secondary" onClick={() => window.location.assign("/calendar")}>
-                        <CalendarPlus size={17} /> 到行事曆排班
-                      </Button>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <Button
+                          variant="secondary"
+                          onClick={() => {
+                            setJobEvent(createJobEventDraft(job, actions.makeId));
+                            setEventModalOpen(true);
+                          }}
+                        >
+                          <CalendarPlus size={17} /> 新增一次工作
+                        </Button>
+                        <Button variant="ghost" onClick={() => actions.toggleJobPinned(job.id)}>
+                          <Star size={16} fill={job.isPinned ? "currentColor" : "none"} /> {job.isPinned ? "已釘選" : "釘選"}
+                        </Button>
+                      </div>
                     </Card>
                   );
                 })}
@@ -123,6 +131,24 @@ export default function JobsPage() {
                     actions.upsertJob(job);
                     setModalOpen(false);
                   }}
+                />
+              </Modal>
+            ) : null}
+            {eventModalOpen && jobEvent ? (
+              <Modal title="新增一次工作" onClose={() => setEventModalOpen(false)}>
+                <QuickEventForm
+                  initialEvent={jobEvent}
+                  events={data.events}
+                  jobs={data.jobs}
+                  students={data.students}
+                  makeId={actions.makeId}
+                  onToggleStudentPinned={actions.toggleStudentPinned}
+                  onToggleJobPinned={actions.toggleJobPinned}
+                  onSave={(event) => {
+                    actions.upsertEvent(event);
+                    setEventModalOpen(false);
+                  }}
+                  onCancel={() => setEventModalOpen(false)}
                 />
               </Modal>
             ) : null}
