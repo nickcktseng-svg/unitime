@@ -162,7 +162,7 @@ export function useAppData() {
       resetData() {
         clearAppData();
         setData(sampleData);
-        notify("已清除並還原示範資料");
+        notify("已清除並還原初始資料");
       },
       makeId
     }),

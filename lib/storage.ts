@@ -1,8 +1,9 @@
 import type { AppData } from "@/types";
 import { sampleData } from "@/lib/sample-data";
-import { migrateAppData } from "@/lib/migrations";
+import { DEMO_CLEANUP_VERSION, migrateAppData } from "@/lib/migrations";
 
 export const STORAGE_KEY = "unitime-app-data-v1";
+const DEMO_CLEANUP_BACKUP_KEY = `${STORAGE_KEY}-before-demo-cleanup-v${DEMO_CLEANUP_VERSION}`;
 
 export function loadAppData(): AppData {
   if (typeof window === "undefined") return sampleData;
@@ -12,7 +13,11 @@ export function loadAppData(): AppData {
     return sampleData;
   }
   try {
-    const migrated = migrateAppData(JSON.parse(raw));
+    const parsed = JSON.parse(raw);
+    if ((parsed?.demoCleanupVersion ?? 0) < DEMO_CLEANUP_VERSION && !window.localStorage.getItem(DEMO_CLEANUP_BACKUP_KEY)) {
+      window.localStorage.setItem(DEMO_CLEANUP_BACKUP_KEY, raw);
+    }
+    const migrated = migrateAppData(parsed);
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated));
     return migrated;
   } catch {

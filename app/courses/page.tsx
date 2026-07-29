@@ -193,7 +193,7 @@ export default function CoursesPage() {
                     </div>
                   ))}
                   <p className="text-xs text-ink/55 dark:text-white/55">
-                    已套用最短空檔 {data.settings.minimumFreeMinutes} 分鐘、家教前後緩衝 {data.settings.tutorBufferMinutes} 分鐘、通勤 {data.settings.commuteMinutes} 分鐘。
+                    已套用最短空檔 {data.settings.minimumFreeMinutes} 分鐘、家教前後緩衝 {data.settings.tutorBufferMinutes} 分鐘。
                   </p>
                 </div>
               </Card>

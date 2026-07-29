@@ -1,7 +1,15 @@
 import type { AppData, CalendarEvent, Course, EventStatus, Holiday, Job, Semester, TutorStudent } from "@/types";
-import { sampleData } from "@/lib/sample-data";
+import { officialJobs, officialStudents, sampleData } from "@/lib/sample-data";
 
-export const CURRENT_STORAGE_VERSION = 2;
+export const CURRENT_STORAGE_VERSION = 3;
+export const DEMO_CLEANUP_VERSION = 1;
+
+const demoCourseIds = new Set(["course-organic", "course-pchem", "course-instrument", "course-lab"]);
+const demoSemesterIds = new Set(["semester-2026-fall"]);
+const demoHolidayIds = new Set(["holiday-mid-autumn", "holiday-school"]);
+const demoJobIds = new Set(["job-lab", "job-xinzhuang", "job-junior-math", "job-cram", "job-weekend"]);
+const demoStudentIds = new Set(["student-zhou", "student-li"]);
+const demoEventIds = new Set(["event-organic", "event-lab-work", "event-xinzhuang", "event-junior", "event-cram", "event-study"]);
 
 const stableColors = [
   "#ef4444",
@@ -101,6 +109,7 @@ function migrateEvent(value: unknown, index: number): CalendarEvent {
     color: stringValue(event.color) || undefined,
     isCompleted: status === "completed" || isCompleted,
     isPaid: boolValue(event.isPaid),
+    paydayRule: stringValue(event.paydayRule) as CalendarEvent["paydayRule"] || undefined,
     payday: stringValue(event.payday) || undefined
   };
 }
@@ -155,6 +164,8 @@ function migrateJob(value: unknown, index: number): Job {
     contactName: stringValue(job.contactName),
     contactInfo: stringValue(job.contactInfo),
     payday: stringValue(job.payday),
+    paydayRule: (stringValue(job.paydayRule, stringValue(job.payday) ? "custom_date" : "same_day") as Job["paydayRule"]) || "same_day",
+    customPayday: stringValue(job.customPayday) || undefined,
     isActive: boolValue(job.isActive, true),
     isPinned: boolValue(job.isPinned),
     lastUsedAt: stringValue(job.lastUsedAt) || undefined,
@@ -195,6 +206,8 @@ function migrateStudent(value: unknown, index: number): TutorStudent {
     isActive: boolValue(student.isActive, true),
     isPinned: boolValue(student.isPinned),
     lastUsedAt: stringValue(student.lastUsedAt) || undefined,
+    paydayRule: (stringValue(student.paydayRule, "same_day") as TutorStudent["paydayRule"]) || "same_day",
+    customPayday: stringValue(student.customPayday) || undefined,
     scheduleMode: (stringValue(student.scheduleMode, stringValue(student.weeklySchedule) ? "weekly" : "irregular") as TutorStudent["scheduleMode"]) || "irregular",
     scheduleWeekday: numberValue(student.scheduleWeekday, 1),
     scheduleStartTime: stringValue(student.scheduleStartTime, "18:00"),
@@ -215,6 +228,42 @@ function migrateStudent(value: unknown, index: number): TutorStudent {
     jobId: stringValue(student.jobId) || undefined,
     records: arrayValue(student.records),
     legacyData: Object.keys(legacyData).length ? legacyData : student.legacyData as Record<string, unknown> | undefined
+  };
+}
+
+function upsertById<T extends { id: string }>(items: T[], additions: T[]) {
+  const next = [...items];
+  for (const addition of additions) {
+    const index = next.findIndex((item) => item.id === addition.id);
+    if (index >= 0) next[index] = { ...next[index], ...addition };
+    else next.push(addition);
+  }
+  return next;
+}
+
+function removeDemoData(data: AppData) {
+  return {
+    ...data,
+    events: data.events.filter(
+      (event) =>
+        !demoEventIds.has(event.id) &&
+        !demoCourseIds.has(event.courseId ?? "") &&
+        !demoJobIds.has(event.jobId ?? "") &&
+        !demoStudentIds.has(event.studentId ?? "")
+    ),
+    courses: data.courses.filter((course) => !demoCourseIds.has(course.id)),
+    jobs: data.jobs.filter((job) => !demoJobIds.has(job.id)),
+    students: data.students.filter((student) => !demoStudentIds.has(student.id)),
+    semesters: data.semesters.filter((semester) => !demoSemesterIds.has(semester.id)),
+    holidays: data.holidays.filter((holiday) => !demoHolidayIds.has(holiday.id))
+  };
+}
+
+export function applyOfficialData(data: AppData) {
+  return {
+    ...data,
+    jobs: upsertById(data.jobs, officialJobs),
+    students: upsertById(data.students, officialStudents)
   };
 }
 
@@ -254,7 +303,7 @@ export function migrateAppData(input: unknown): AppData {
     : [legacySemester];
   const defaultSemesterId = semesters.find((semester) => semester.isCurrent)?.id ?? semesters[0]?.id ?? "semester-default";
 
-  return {
+  const migrated: AppData = {
     storageVersion: CURRENT_STORAGE_VERSION,
     events: arrayValue<unknown>(raw.events, sampleData.events).map(migrateEvent),
     courses: arrayValue<unknown>(raw.courses, sampleData.courses).map((course, index) =>
@@ -266,4 +315,7 @@ export function migrateAppData(input: unknown): AppData {
     holidays: arrayValue<unknown>(raw.holidays, []).map(migrateHoliday),
     settings: { ...sampleData.settings, ...(isRecord(raw.settings) ? raw.settings : {}) }
   };
+
+  const cleaned = numberValue(raw.demoCleanupVersion) >= DEMO_CLEANUP_VERSION ? migrated : removeDemoData(migrated);
+  return applyOfficialData({ ...cleaned, demoCleanupVersion: DEMO_CLEANUP_VERSION });
 }

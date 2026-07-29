@@ -130,7 +130,6 @@ export default function IncomePage() {
               <StatCard label="實際完成工時" value={`${summary.completedHours.toFixed(1)} 小時`} />
               <StatCard label="取消工時" value={`${summary.canceledHours.toFixed(1)} 小時`} />
               <StatCard label="平均實際時薪" value={money(summary.actualAverageHourlyRate)} />
-              <StatCard label="有效平均時薪" value={money(summary.effectiveAverageHourlyRate)} />
             </div>
             <div className="grid gap-5 xl:grid-cols-[0.8fr_1.2fr]">
               <Card>

@@ -86,7 +86,7 @@ export default function SettingsPage() {
           <div className="grid gap-5">
             <div>
               <h2 className="text-xl font-black">設定</h2>
-              <p className="text-sm text-ink/60 dark:text-white/60">個人資料、排程規則、有效時薪計算與資料備份。</p>
+              <p className="text-sm text-ink/60 dark:text-white/60">個人資料、排程規則與資料備份。</p>
             </div>
             {error ? <div className="rounded-lg bg-red-50 p-3 text-sm font-bold text-red-700">{error}</div> : null}
             <Card>
@@ -142,40 +142,11 @@ export default function SettingsPage() {
                 <Field label="家教前後緩衝 分鐘">
                   <TextInput min={0} type="number" value={settings.tutorBufferMinutes} onChange={(event) => update("tutorBufferMinutes", Number(event.target.value))} />
                 </Field>
-                <Field label="預設交通緩衝 分鐘">
-                  <TextInput min={0} type="number" value={settings.commuteMinutes} onChange={(event) => update("commuteMinutes", Number(event.target.value))} />
-                </Field>
-                <Field label="預設備課時間 分鐘">
-                  <TextInput min={0} type="number" value={settings.defaultPrepMinutes} onChange={(event) => update("defaultPrepMinutes", Number(event.target.value))} />
-                </Field>
-                <Field label="預設完成紀錄時間 分鐘">
-                  <TextInput min={0} type="number" value={settings.defaultReportMinutes} onChange={(event) => update("defaultReportMinutes", Number(event.target.value))} />
-                </Field>
               </div>
               <div className="mt-4">
                 <Field label="不希望工作的時段">
                   <TextArea value={settings.avoidWorkPeriods} onChange={(event) => update("avoidWorkPeriods", event.target.value)} />
                 </Field>
-              </div>
-            </Card>
-            <Card>
-              <h3 className="mb-4 text-lg font-black">有效時薪計算</h3>
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                {[
-                  ["includeClassTimeInEffectiveRate", "包含上課時間"],
-                  ["includePrepTimeInEffectiveRate", "包含備課時間"],
-                  ["includeCommuteTimeInEffectiveRate", "包含通勤時間"],
-                  ["includeReportTimeInEffectiveRate", "包含完成紀錄時間"]
-                ].map(([key, label]) => (
-                  <label key={key} className="flex items-center gap-2 rounded-lg bg-ink/5 p-3 text-sm font-bold dark:bg-white/10">
-                    <input
-                      type="checkbox"
-                      checked={Boolean(settings[key as keyof UserSettings])}
-                      onChange={(event) => update(key as keyof UserSettings, event.target.checked as never)}
-                    />
-                    {label}
-                  </label>
-                ))}
               </div>
             </Card>
             <Card>

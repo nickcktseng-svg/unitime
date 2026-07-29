@@ -10,7 +10,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Modal } from "@/components/ui/Modal";
 import { JobForm } from "@/components/forms/JobForm";
 import { QuickEventForm } from "@/components/forms/QuickEventForm";
-import { calculateEffectiveHourlyRate, calculateMonthlyIncome } from "@/lib/calculations";
+import { calculateMonthlyIncome } from "@/lib/calculations";
 import { currentMonth } from "@/lib/date-utils";
 import { createJobEventDraft, jobTypeLabels } from "@/lib/quick-schedule";
 import type { CalendarEvent, Job } from "@/types";
@@ -39,7 +39,7 @@ export default function JobsPage() {
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <h2 className="text-xl font-black">工作與家教</h2>
-                <p className="text-sm text-ink/60 dark:text-white/60">管理打工條件、薪資、聯絡資訊與有效時薪。</p>
+                <p className="text-sm text-ink/60 dark:text-white/60">管理打工條件、薪資與聯絡資訊。</p>
               </div>
               <Button
                 onClick={() => {
@@ -69,8 +69,6 @@ export default function JobsPage() {
                   const nextShift = data.events
                     .filter((event) => event.jobId === job.id && isAfter(parseISO(event.start), new Date()))
                     .sort((a, b) => a.start.localeCompare(b.start))[0];
-                  const effectiveHours = job.fixedHours + job.prepMinutes / 60 + job.commuteMinutes / 60 + job.reportMinutes / 60;
-                  const effectiveRate = calculateEffectiveHourlyRate(job.fixedPay || job.fixedHours * job.hourlyRate, effectiveHours);
                   return (
                     <Card key={job.id}>
                       <div className="flex items-start justify-between gap-3">
@@ -95,7 +93,6 @@ export default function JobsPage() {
                         <p className="rounded-lg bg-ink/5 p-2 dark:bg-white/10">單次時數<br /><b>{((job.defaultDurationMinutes ?? Math.round(job.fixedHours * 60)) / 60).toFixed(1)} 小時</b></p>
                         <p className="rounded-lg bg-ink/5 p-2 dark:bg-white/10">本月工時<br /><b>{monthHours.toFixed(1)} 小時</b></p>
                         <p className="rounded-lg bg-ink/5 p-2 dark:bg-white/10">本月收入<br /><b>NT$ {Math.round(income).toLocaleString()}</b></p>
-                        <p className="rounded-lg bg-ink/5 p-2 dark:bg-white/10">有效時薪<br /><b>NT$ {Math.round(effectiveRate)}</b></p>
                         <p className="rounded-lg bg-ink/5 p-2 dark:bg-white/10">預設獎金<br /><b>NT$ {job.defaultBonus ?? job.reportBonus ?? 0}</b></p>
                       </div>
                       <div className="mt-3 rounded-lg bg-mint/10 p-3 text-sm">

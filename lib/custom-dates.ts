@@ -1,8 +1,9 @@
-import { format, parseISO } from "date-fns";
+import { eachDayOfInterval, endOfMonth, endOfWeek, format, parseISO, startOfMonth, startOfWeek } from "date-fns";
 import type { CalendarEvent } from "@/types";
 import { calculateEstimatedEventIncome, calculateWorkHours } from "@/lib/calculations";
 import { findEventConflicts } from "@/lib/conflict-check";
 import { toDateTime } from "@/lib/date-utils";
+import { resolvePaydayDate } from "@/lib/payday";
 
 export type CustomOccurrenceDraft = {
   id?: string;
@@ -18,6 +19,13 @@ export type CustomOccurrenceDraft = {
 };
 
 export type BatchCustomFields = Partial<Pick<CustomOccurrenceDraft, "startTime" | "endTime" | "hourlyRate" | "fixedPay" | "bonus" | "location" | "notes">>;
+
+export type CustomDateCalendarDay = {
+  date: string;
+  dayOfMonth: string;
+  inCurrentMonth: boolean;
+  isSelected: boolean;
+};
 
 export function occurrenceFromEvent(event: CalendarEvent): CustomOccurrenceDraft {
   const start = parseISO(event.start);
@@ -49,6 +57,28 @@ export function addCustomDate(occurrences: CustomOccurrenceDraft[], date: string
   return uniqueOccurrences([...occurrences, { ...source, id: undefined, date }]).sort((a, b) => a.date.localeCompare(b.date));
 }
 
+export function removeCustomDate(occurrences: CustomOccurrenceDraft[], date: string) {
+  return occurrences.filter((occurrence) => occurrence.date !== date);
+}
+
+export function buildCustomDateCalendar(month: Date, selectedDates: string[], weekStartsOn: 0 | 1 = 1): CustomDateCalendarDay[] {
+  const selected = new Set(selectedDates);
+  const monthStart = startOfMonth(month);
+  const monthEnd = endOfMonth(month);
+  return eachDayOfInterval({
+    start: startOfWeek(monthStart, { weekStartsOn }),
+    end: endOfWeek(monthEnd, { weekStartsOn })
+  }).map((date) => {
+    const dateKey = format(date, "yyyy-MM-dd");
+    return {
+      date: dateKey,
+      dayOfMonth: format(date, "d"),
+      inCurrentMonth: date.getMonth() === monthStart.getMonth(),
+      isSelected: selected.has(dateKey)
+    };
+  });
+}
+
 export function applyToAllOccurrences(occurrences: CustomOccurrenceDraft[], fields: BatchCustomFields) {
   return occurrences.map((occurrence) => ({ ...occurrence, ...fields }));
 }
@@ -59,23 +89,27 @@ export function buildCustomDateEvents(
   makeId: (prefix: string) => string,
   groupId = source.groupId ?? makeId("group")
 ) {
-  return uniqueOccurrences(occurrences).map((occurrence, index) => ({
-    ...source,
-    id: occurrence.id ?? makeId("event"),
-    start: toDateTime(occurrence.date, occurrence.startTime),
-    end: toDateTime(occurrence.date, occurrence.endTime),
-    hourlyRate: Number(occurrence.hourlyRate) || undefined,
-    fixedPay: Number(occurrence.fixedPay) || undefined,
-    bonus: Number(occurrence.bonus) || undefined,
-    location: occurrence.location,
-    notes: occurrence.notes,
-    repeatType: "custom_dates" as const,
-    repeatRule: undefined,
-    groupId,
-    customOccurrenceId: occurrence.id ?? `${groupId}-${index}`,
-    sourceEventId: source.sourceEventId ?? source.id,
-    isCustomOccurrence: true
-  }));
+  return uniqueOccurrences(occurrences).map((occurrence, index) => {
+    const start = toDateTime(occurrence.date, occurrence.startTime);
+    return {
+      ...source,
+      id: occurrence.id ?? makeId("event"),
+      start,
+      end: toDateTime(occurrence.date, occurrence.endTime),
+      hourlyRate: Number(occurrence.hourlyRate) || undefined,
+      fixedPay: Number(occurrence.fixedPay) || undefined,
+      bonus: Number(occurrence.bonus) || undefined,
+      location: occurrence.location,
+      notes: occurrence.notes,
+      repeatType: "custom_dates" as const,
+      repeatRule: undefined,
+      groupId,
+      customOccurrenceId: occurrence.id ?? `${groupId}-${index}`,
+      sourceEventId: source.sourceEventId ?? source.id,
+      isCustomOccurrence: true,
+      payday: source.paydayRule ? resolvePaydayDate(source.paydayRule, start, source.payday) : source.payday
+    };
+  });
 }
 
 export function summarizeCustomDateEvents(events: CalendarEvent[]) {

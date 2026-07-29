@@ -1,10 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import type { Job, JobType } from "@/types";
+import type { Job, JobType, PaydayRule } from "@/types";
 import { Button } from "@/components/ui/Button";
 import { Field, SelectInput, TextArea, TextInput } from "@/components/ui/Field";
 import { jobTypeLabels } from "@/lib/quick-schedule";
+import { paydayRuleLabels } from "@/lib/payday";
 
 const jobTypes: { value: JobType; label: string }[] = [
   { value: "tutoring", label: "家教" },
@@ -35,6 +36,8 @@ function emptyJob(makeId: (prefix: string) => string): Job {
     contactName: "",
     contactInfo: "",
     payday: "",
+    paydayRule: "same_day",
+    customPayday: "",
     isActive: true,
     notes: "",
     color: "#0891b2"
@@ -60,7 +63,9 @@ export function JobForm({
     defaultFixedPay: job?.defaultFixedPay ?? job?.fixedPay ?? 0,
     defaultBonus: job?.defaultBonus ?? job?.reportBonus ?? 0,
     color: job?.color ?? "#0891b2",
-    isActive: job?.isActive ?? true
+    isActive: job?.isActive ?? true,
+    paydayRule: job?.paydayRule ?? (job?.payday ? "custom_date" : "same_day"),
+    customPayday: job?.customPayday ?? job?.payday ?? ""
   }));
   const [error, setError] = useState("");
   const defaultHours = (draft.defaultDurationMinutes ?? 120) / 60;
@@ -76,7 +81,9 @@ export function JobForm({
       hourlyRate: draft.defaultHourlyRate ?? draft.hourlyRate,
       fixedHours: defaultHours,
       fixedPay: draft.defaultFixedPay || undefined,
-      reportBonus: draft.defaultBonus || undefined
+      reportBonus: draft.defaultBonus || undefined,
+      payday: draft.paydayRule === "custom_date" ? draft.customPayday ?? "" : "",
+      customPayday: draft.paydayRule === "custom_date" ? draft.customPayday : undefined
     });
   }
 
@@ -141,9 +148,24 @@ export function JobForm({
         <Field label="顏色">
           <TextInput type="color" value={draft.color} onChange={(event) => setDraft({ ...draft, color: event.target.value })} />
         </Field>
-        <Field label="發薪日 可選">
-          <TextInput value={draft.payday} onChange={(event) => setDraft({ ...draft, payday: event.target.value })} />
+        <Field label="領薪方式">
+          <SelectInput value={draft.paydayRule ?? "same_day"} onChange={(event) => setDraft({ ...draft, paydayRule: event.target.value as PaydayRule })}>
+            {Object.entries(paydayRuleLabels).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </SelectInput>
         </Field>
+        {draft.paydayRule === "custom_date" ? (
+          <Field label="自定義領薪日">
+            <TextInput
+              type="date"
+              value={draft.customPayday ?? ""}
+              onChange={(event) => setDraft({ ...draft, customPayday: event.target.value, payday: event.target.value })}
+            />
+          </Field>
+        ) : null}
         <label className="flex items-center gap-2 text-sm font-bold">
           <input type="checkbox" checked={draft.isActive} onChange={(event) => setDraft({ ...draft, isActive: event.target.checked })} />
           仍在進行

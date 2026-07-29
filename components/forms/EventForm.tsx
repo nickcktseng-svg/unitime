@@ -1,8 +1,8 @@
 "use client";
 
-import { addMinutes, format, parseISO } from "date-fns";
+import { addMinutes, addMonths, format, parseISO, subMonths } from "date-fns";
 import { useMemo, useState } from "react";
-import type { CalendarEvent, EventCategory, EventStatus, Job, RepeatType, TutorStudent } from "@/types";
+import type { CalendarEvent, EventCategory, EventStatus, Job, PaydayRule, RepeatType, TutorStudent } from "@/types";
 import { findEventConflicts } from "@/lib/conflict-check";
 import { categoryMeta } from "@/lib/sample-data";
 import { calculateEventIncome, calculateEstimatedEventIncome, calculateWorkHours } from "@/lib/calculations";
@@ -10,12 +10,15 @@ import { toDateTime } from "@/lib/date-utils";
 import {
   addCustomDate,
   applyToAllOccurrences,
+  buildCustomDateCalendar,
   buildCustomDateEvents,
   customDateConflicts,
   occurrenceFromEvent,
+  removeCustomDate,
   summarizeCustomDateEvents,
   type CustomOccurrenceDraft
 } from "@/lib/custom-dates";
+import { isCustomPaydayBeforeEvent, paydayRuleLabels, resolvePaydayDate } from "@/lib/payday";
 import { Button } from "@/components/ui/Button";
 import { Field, SelectInput, TextArea, TextInput } from "@/components/ui/Field";
 
@@ -45,6 +48,7 @@ type EventDraft = {
   cancellationPay: number;
   isCompleted: boolean;
   isPaid: boolean;
+  paydayRule: PaydayRule;
   payday: string;
 };
 
@@ -65,10 +69,12 @@ function fromEvent(event?: CalendarEvent, selectedDate = today): EventDraft {
   const selectedStart = selectedDate.includes("T") ? selectedDate : `${selectedDate}T09:00:00`;
   const start = event ? parseISO(event.start) : new Date(selectedStart);
   const end = event ? parseISO(event.end) : addMinutes(start, 60);
+  const date = format(start, "yyyy-MM-dd");
+  const paydayRule = event?.paydayRule ?? (event?.payday ? "custom_date" : "same_day");
   return {
     title: event?.title ?? "",
     category: event?.category ?? "personal",
-    date: format(start, "yyyy-MM-dd"),
+    date,
     startTime: format(start, "HH:mm"),
     endTime: format(event ? end : addMinutes(start, 60), "HH:mm"),
     location: event?.location ?? "",
@@ -91,8 +97,13 @@ function fromEvent(event?: CalendarEvent, selectedDate = today): EventDraft {
     cancellationPay: event?.cancellationPay ?? 0,
     isCompleted: event?.isCompleted ?? false,
     isPaid: event?.isPaid ?? false,
-    payday: event?.payday ?? ""
+    paydayRule,
+    payday: event?.payday ?? resolvePaydayDate(paydayRule, date)
   };
+}
+
+function resolveDraftPayday(draft: EventDraft, customDate = draft.payday) {
+  return resolvePaydayDate(draft.paydayRule, draft.date, customDate);
 }
 
 export function EventForm({
@@ -122,6 +133,7 @@ export function EventForm({
 }) {
   const [draft, setDraft] = useState<EventDraft>(() => fromEvent(event, selectedDate));
   const [customDateInput, setCustomDateInput] = useState(() => draft.date);
+  const [calendarMonth, setCalendarMonth] = useState(() => parseISO(`${draft.date.slice(0, 7)}-01`));
   const [customOccurrences, setCustomOccurrences] = useState<CustomOccurrenceDraft[]>(() =>
     groupEvents?.length
       ? groupEvents.sort((a, b) => a.start.localeCompare(b.start)).map(occurrenceFromEvent)
@@ -195,6 +207,7 @@ export function EventForm({
       color: event?.color ?? selectedStudent?.color ?? selectedJob?.color,
       isCompleted: draft.status === "completed" || draft.isCompleted,
       isPaid: draft.isPaid,
+      paydayRule: draft.paydayRule,
       payday: draft.payday || undefined
     }),
     [cancellationType, draft, event, makeId, selectedJob?.color, selectedStudent?.color]
@@ -210,6 +223,10 @@ export function EventForm({
   const customSummary = summarizeCustomDateEvents(customEvents);
   const customConflicts = customDateConflicts(customEvents, events);
   const blockingCustomConflicts = customConflicts.filter((item, index) => item.conflicts.length > 0 && !customOccurrences[index]?.forceSave);
+  const selectedCustomDates = customOccurrences.map((occurrence) => occurrence.date);
+  const customCalendarDays = buildCustomDateCalendar(calendarMonth, selectedCustomDates, 1);
+  const paydayWarning = draft.paydayRule === "custom_date" && isCustomPaydayBeforeEvent(draft.date, draft.payday);
+  const firstOccurrence = customOccurrences[0] ?? occurrenceFromEvent(nextEvent);
 
   function updateStudent(studentId: string) {
     const student = students.find((item) => item.id === studentId);
@@ -228,7 +245,9 @@ export function EventForm({
       bonusEligible: Boolean(student?.defaultBonus),
       location: student?.location ?? draft.location,
       notes: student?.notes ?? draft.notes,
-      countsForIncome: studentId ? true : draft.countsForIncome
+      countsForIncome: studentId ? true : draft.countsForIncome,
+      paydayRule: student?.paydayRule ?? "same_day",
+      payday: student ? resolvePaydayDate(student.paydayRule ?? "same_day", draft.date, student.customPayday) : draft.payday
     });
     setCustomOccurrences((current) =>
       applyToAllOccurrences(current, {
@@ -268,7 +287,9 @@ export function EventForm({
       bonusEligible: Boolean(job?.defaultBonus ?? job?.reportBonus),
       location: job?.location ?? draft.location,
       notes: job?.notes ?? draft.notes,
-      countsForIncome: jobId ? true : draft.countsForIncome
+      countsForIncome: jobId ? true : draft.countsForIncome,
+      paydayRule: job?.paydayRule ?? "same_day",
+      payday: job ? resolvePaydayDate(job.paydayRule ?? "same_day", draft.date, job.customPayday || job.payday) : draft.payday
     });
     setCustomOccurrences((current) =>
       applyToAllOccurrences(current, {
@@ -291,6 +312,10 @@ export function EventForm({
       setError("結束時間必須晚於開始時間");
       return;
     }
+    if (paydayWarning) {
+      setError("自定義領薪日不可早於事件日期");
+      return;
+    }
     if (draft.repeatType === "custom_dates") {
       if (customOccurrences.length === 0) return setError("請至少保留一個自訂日期");
       if (customEvents.some((item) => new Date(item.end) <= new Date(item.start))) return setError("自訂日期中有結束時間早於開始時間");
@@ -311,24 +336,37 @@ export function EventForm({
   }
 
   function syncBaseFromDate(nextDraft: EventDraft) {
-    setDraft(nextDraft);
+    const resolvedDraft = {
+      ...nextDraft,
+      payday: nextDraft.paydayRule === "custom_date" ? nextDraft.payday : resolveDraftPayday(nextDraft)
+    };
+    setDraft(resolvedDraft);
     setCustomOccurrences((current) =>
       current.map((occurrence, index) =>
         index === 0
           ? {
               ...occurrence,
-              date: nextDraft.date,
-              startTime: nextDraft.startTime,
-              endTime: nextDraft.endTime,
-              hourlyRate: nextDraft.hourlyRate,
-              fixedPay: nextDraft.fixedPay,
-              bonus: nextDraft.bonus,
-              location: nextDraft.location,
-              notes: nextDraft.notes
+              date: resolvedDraft.date,
+              startTime: resolvedDraft.startTime,
+              endTime: resolvedDraft.endTime,
+              hourlyRate: resolvedDraft.hourlyRate,
+              fixedPay: resolvedDraft.fixedPay,
+              bonus: resolvedDraft.bonus,
+              location: resolvedDraft.location,
+              notes: resolvedDraft.notes
             }
           : occurrence
       )
     );
+  }
+
+  function toggleCalendarDate(date: string) {
+    setCustomOccurrences((current) =>
+      current.some((occurrence) => occurrence.date === date)
+        ? removeCustomDate(current, date)
+        : addCustomDate(current, date, firstOccurrence)
+    );
+    setCustomDateInput(date);
   }
 
   return (
@@ -424,6 +462,9 @@ export function EventForm({
             value={draft.repeatType}
             onChange={(event) => {
               const repeatType = event.target.value as RepeatType;
+              if (repeatType === "custom_dates" && customOccurrences.length === 0) {
+                setCustomOccurrences([occurrenceFromEvent(nextEvent)]);
+              }
               setDraft({
                 ...draft,
                 repeatType,
@@ -484,25 +525,76 @@ export function EventForm({
         ) : null}
         {draft.repeatType === "custom_dates" ? (
           <div className="grid gap-4">
-            <div className="grid gap-3 rounded-lg bg-white p-3 text-sm dark:bg-black/20 md:grid-cols-[1fr_auto_auto_auto]">
-              <Field label="新增日期">
-                <TextInput type="date" value={customDateInput} onChange={(event) => setCustomDateInput(event.target.value)} />
-              </Field>
-              <div className="flex items-end">
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={() => setCustomOccurrences((current) => addCustomDate(current, customDateInput, customOccurrences[0]))}
-                >
-                  新增日期
-                </Button>
+            <div className="grid gap-4 rounded-lg bg-white p-3 text-sm dark:bg-black/20 lg:grid-cols-[0.9fr_1.1fr]">
+              <div className="grid gap-3">
+                <div className="flex items-center justify-between gap-2">
+                  <Button type="button" variant="ghost" onClick={() => setCalendarMonth((month) => subMonths(month, 1))}>
+                    上一個月
+                  </Button>
+                  <p className="font-black">{format(calendarMonth, "yyyy / MM")}</p>
+                  <Button type="button" variant="ghost" onClick={() => setCalendarMonth((month) => addMonths(month, 1))}>
+                    下一個月
+                  </Button>
+                </div>
+                <div className="grid grid-cols-7 gap-1 text-center text-xs font-black text-ink/55 dark:text-white/55">
+                  {["一", "二", "三", "四", "五", "六", "日"].map((day) => (
+                    <span key={day}>{day}</span>
+                  ))}
+                </div>
+                <div className="grid grid-cols-7 gap-1">
+                  {customCalendarDays.map((day) => (
+                    <button
+                      key={day.date}
+                      type="button"
+                      aria-pressed={day.isSelected}
+                      className={`aspect-square rounded-lg text-sm font-bold ${
+                        day.isSelected
+                          ? "bg-mint text-ink"
+                          : day.inCurrentMonth
+                            ? "bg-ink/5 hover:bg-ink/10 dark:bg-white/10 dark:hover:bg-white/15"
+                            : "bg-transparent text-ink/30 dark:text-white/30"
+                      }`}
+                      onClick={() => toggleCalendarDate(day.date)}
+                    >
+                      {day.dayOfMonth}
+                    </button>
+                  ))}
+                </div>
               </div>
-              <div className="flex items-end">
-                <Button type="button" variant="secondary" onClick={() => setCustomOccurrences([customOccurrences[0]])}>
-                  清除全部日期
-                </Button>
+              <div className="grid content-start gap-3">
+                <div className="grid gap-3 md:grid-cols-[1fr_auto_auto]">
+                  <Field label="新增日期">
+                    <TextInput type="date" value={customDateInput} onChange={(event) => setCustomDateInput(event.target.value)} />
+                  </Field>
+                  <div className="flex items-end">
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={() => setCustomOccurrences((current) => addCustomDate(current, customDateInput, firstOccurrence))}
+                    >
+                      新增日期
+                    </Button>
+                  </div>
+                  <div className="flex items-end">
+                    <Button type="button" variant="secondary" onClick={() => setCustomOccurrences([])}>
+                      清除全部日期
+                    </Button>
+                  </div>
+                </div>
+                <div className="rounded-lg bg-ink/5 p-3 font-black dark:bg-white/10">已選 {customOccurrences.length} 筆</div>
+                <div className="flex flex-wrap gap-2">
+                  {customOccurrences.map((occurrence) => (
+                    <button
+                      key={occurrence.date}
+                      type="button"
+                      className="rounded-lg bg-mint/15 px-3 py-2 text-sm font-bold"
+                      onClick={() => setCustomOccurrences((current) => removeCustomDate(current, occurrence.date))}
+                    >
+                      {occurrence.date} 移除
+                    </button>
+                  ))}
+                </div>
               </div>
-              <div className="flex items-end text-sm font-black">已選 {customOccurrences.length} 筆</div>
             </div>
             <div className="grid gap-2 rounded-lg bg-mint/10 p-3 text-sm font-bold sm:grid-cols-3">
               <span>共 {customSummary.count} 筆</span>
@@ -531,6 +623,9 @@ export function EventForm({
               </Button>
             </div>
             <div className="grid gap-3">
+              {customOccurrences.length === 0 ? (
+                <div className="rounded-lg bg-amber-50 p-3 text-sm font-bold text-amber-800">請至少選擇一個日期後再儲存。</div>
+              ) : null}
               {customOccurrences.map((occurrence, index) => {
                 const eventForPreview = customEvents[index];
                 const conflict = customConflicts[index];
@@ -539,7 +634,7 @@ export function EventForm({
                   <div key={`${occurrence.date}-${index}`} className="grid gap-3 rounded-lg bg-white p-3 dark:bg-black/20">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <p className="font-black">
-                        {occurrence.date} / {occurrence.startTime}-{occurrence.endTime} / NT$ {Math.round(estimated).toLocaleString()}
+                        {format(parseISO(occurrence.date), "M/d")} / {occurrence.startTime}-{occurrence.endTime} / NT$ {Math.round(estimated).toLocaleString()}
                       </p>
                       <Button
                         type="button"
@@ -636,14 +731,40 @@ export function EventForm({
                   onChange={(event) => syncBaseFromDate({ ...draft, bonus: Number(event.target.value) })}
                 />
               </Field>
-              <Field label="預計領薪日">
+              <Field label="領薪方式">
+                <SelectInput
+                  value={draft.paydayRule}
+                  onChange={(event) => {
+                    const paydayRule = event.target.value as PaydayRule;
+                    setDraft({
+                      ...draft,
+                      paydayRule,
+                      payday: resolvePaydayDate(paydayRule, draft.date, draft.payday)
+                    });
+                  }}
+                >
+                  {Object.entries(paydayRuleLabels).map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </SelectInput>
+              </Field>
+            </div>
+            {draft.paydayRule === "custom_date" ? (
+              <Field label="自定義領薪日">
                 <TextInput
                   type="date"
                   value={draft.payday}
                   onChange={(event) => setDraft({ ...draft, payday: event.target.value })}
                 />
               </Field>
-            </div>
+            ) : (
+              <div className="rounded-lg bg-white px-3 py-2 text-sm font-bold dark:bg-black/20">
+                預計領薪日：{draft.payday || "尚未計算"}
+              </div>
+            )}
+            {paydayWarning ? <div className="rounded-lg bg-amber-50 p-3 text-sm font-bold text-amber-800">自定義領薪日不可早於事件日期。</div> : null}
             <div className="grid gap-2 text-sm font-semibold sm:grid-cols-3">
               <label className="flex items-center gap-2">
                 <input

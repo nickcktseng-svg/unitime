@@ -1,5 +1,6 @@
 import { addMinutes, format, parseISO } from "date-fns";
 import type { CalendarEvent, EventCategory, Job, TutorStudent } from "@/types";
+import { resolvePaydayDate } from "@/lib/payday";
 
 export type QuickTarget =
   | { kind: "student"; id: string; name: string; typeLabel: string; color: string; hourlyRate: number; durationMinutes: number; isPinned?: boolean; lastUsedAt?: string }
@@ -52,6 +53,8 @@ export function createStudentEventDraft(student: TutorStudent, makeId: (prefix: 
     bonusReceived: false,
     studentId: student.id,
     jobId: student.jobId,
+    paydayRule: student.paydayRule ?? "same_day",
+    payday: resolvePaydayDate(student.paydayRule ?? "same_day", start, student.customPayday),
     status: "scheduled",
     color: student.color,
     isCompleted: false,
@@ -79,7 +82,8 @@ export function createJobEventDraft(job: Job, makeId: (prefix: string) => string
     bonusEligible: bonus > 0,
     bonusReceived: false,
     jobId: job.id,
-    payday: job.payday || undefined,
+    paydayRule: job.paydayRule ?? "same_day",
+    payday: resolvePaydayDate(job.paydayRule ?? "same_day", start, job.customPayday || job.payday),
     status: "scheduled",
     color: job.color,
     isCompleted: false,

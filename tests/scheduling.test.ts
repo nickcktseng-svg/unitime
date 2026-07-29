@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { parseISO } from "date-fns";
 import { describe, expect, it } from "vitest";
 import { expandRecurringEvents } from "@/lib/calendar-expansion";
 import {
@@ -16,6 +18,7 @@ import {
 import {
   addCustomDate,
   applyToAllOccurrences,
+  buildCustomDateCalendar,
   buildCustomDateEvents,
   customDateConflicts,
   deleteCustomGroup,
@@ -23,6 +26,8 @@ import {
   occurrenceFromEvent,
   summarizeCustomDateEvents
 } from "@/lib/custom-dates";
+import { officialJobs, officialStudents, sampleData } from "@/lib/sample-data";
+import { isCustomPaydayBeforeEvent, resolvePaydayDate } from "@/lib/payday";
 import type { CalendarEvent, Course, Holiday, Job, Semester, TutorStudent } from "@/types";
 
 const semester: Semester = {
@@ -250,7 +255,7 @@ describe("migration compatibility", () => {
       students: [{ ...student, progressPercent: 60, records: [{ id: "legacy" }] }],
       settings: { semesterStart: "2026-09-01", semesterEnd: "2027-01-31" }
     });
-    expect(migrated.storageVersion).toBe(2);
+    expect(migrated.storageVersion).toBe(3);
     expect(migrated.events[0].status).toBe("completed");
     expect(migrated.students[0].legacyData?.progressPercent).toBe(60);
     expect(migrated.semesters).toHaveLength(1);
@@ -398,6 +403,12 @@ describe("custom multi-date scheduling", () => {
     expect(events.map((event) => event.start.slice(0, 10))).toEqual(["2026-07-04", "2026-07-15", "2026-07-25"]);
   });
 
+  it("marks selected dates in the multi-date calendar data", () => {
+    const days = buildCustomDateCalendar(parseISO("2026-07-01"), ["2026-07-04", "2026-07-15", "2026-07-25"]);
+    expect(days.filter((day) => day.isSelected).map((day) => day.date)).toEqual(["2026-07-04", "2026-07-15", "2026-07-25"]);
+    expect(days.some((day) => day.inCurrentMonth && day.dayOfMonth === "15")).toBe(true);
+  });
+
   it("uses one groupId with different event ids", () => {
     const events = threeOccurrenceEvents();
     expect(new Set(events.map((event) => event.groupId))).toEqual(new Set(["group-1"]));
@@ -475,5 +486,94 @@ describe("custom multi-date scheduling", () => {
     const migrated = migrateAppData({ events: [source], students: [], jobs: [], courses: [] });
     expect(migrated.events[0].repeatType).toBe("none");
     expect(migrated.events[0].groupId).toBeUndefined();
+  });
+});
+
+describe("official initial data and demo cleanup", () => {
+  it("does not ship demo courses or events", () => {
+    expect(sampleData.courses).toEqual([]);
+    expect(sampleData.events).toEqual([]);
+    expect(sampleData.jobs.some((item) => item.name.includes("範例"))).toBe(false);
+    expect(sampleData.students.some((item) => item.name.includes("範例"))).toBe(false);
+  });
+
+  it("removes fixed-id demo records during migration", () => {
+    const migrated = migrateAppData({
+      demoCleanupVersion: 0,
+      courses: [{ ...course, id: "course-organic", name: "有機化學" }],
+      jobs: [{ ...job, id: "job-lab", name: "實驗室工讀" }],
+      students: [{ ...student, id: "student-zhou", name: "周家兄妹" }],
+      events: [paidEvent({ id: "event-lab-work", jobId: "job-lab", studentId: undefined })],
+      semesters: [{ ...semester, id: "semester-2026-fall" }],
+      holidays: [{ id: "holiday-school", date: "2026-10-10", name: "校內停課日", type: "school", cancelsClasses: true, stopsFixedWork: false, notes: "" }]
+    });
+    expect(migrated.courses.find((item) => item.id === "course-organic")).toBeUndefined();
+    expect(migrated.jobs.find((item) => item.id === "job-lab")).toBeUndefined();
+    expect(migrated.students.find((item) => item.id === "student-zhou")).toBeUndefined();
+    expect(migrated.events.find((item) => item.id === "event-lab-work")).toBeUndefined();
+  });
+
+  it("creates the six official students only once", () => {
+    const migrated = migrateAppData(migrateAppData({ students: [], jobs: [], events: [], courses: [] }));
+    const ids = officialStudents.map((item) => item.id);
+    expect(migrated.students.filter((item) => ids.includes(item.id))).toHaveLength(6);
+    expect(new Set(migrated.students.map((item) => item.id)).size).toBe(migrated.students.length);
+  });
+
+  it("creates Xueguan and Delin only once", () => {
+    const migrated = migrateAppData(migrateAppData({ students: [], jobs: [], events: [], courses: [] }));
+    const ids = officialJobs.map((item) => item.id);
+    expect(migrated.jobs.filter((item) => ids.includes(item.id))).toHaveLength(2);
+    expect(new Set(migrated.jobs.map((item) => item.id)).size).toBe(migrated.jobs.length);
+  });
+
+  it("keeps official bonus defaults", () => {
+    expect(officialJobs.find((item) => item.id === "job-delin-internship")?.defaultBonus).toBe(200);
+    expect(officialStudents.find((item) => item.id === "student-yansheng-math")?.defaultBonus).toBe(10);
+    expect(officialStudents.find((item) => item.id === "student-yunhao")?.defaultBonus).toBe(10);
+  });
+});
+
+describe("payday rules", () => {
+  it("calculates same-day payday", () => {
+    expect(resolvePaydayDate("same_day", "2026-09-18T18:00:00")).toBe("2026-09-18");
+  });
+
+  it("calculates next month 5th payday", () => {
+    expect(resolvePaydayDate("next_month_5", "2026-09-18T18:00:00")).toBe("2026-10-05");
+  });
+
+  it("calculates next month 10th payday", () => {
+    expect(resolvePaydayDate("next_month_10", "2026-09-18T18:00:00")).toBe("2026-10-10");
+  });
+
+  it("warns when a custom payday is before the event date", () => {
+    expect(isCustomPaydayBeforeEvent("2026-09-18T18:00:00", "2026-09-17")).toBe(true);
+    expect(isCustomPaydayBeforeEvent("2026-09-18T18:00:00", "2026-09-18")).toBe(false);
+  });
+
+  it("passes student payday defaults into quick events", () => {
+    const draft = createStudentEventDraft({ ...student, paydayRule: "next_month_5" }, () => "event-pay", "2026-09-18T18:00:00");
+    expect(draft.paydayRule).toBe("next_month_5");
+    expect(draft.payday).toBe("2026-10-05");
+  });
+
+  it("passes job payday and bonus defaults into quick events", () => {
+    const draft = createJobEventDraft(
+      { ...officialJobs.find((item) => item.id === "job-delin-internship")!, paydayRule: "next_month_10" },
+      () => "event-delin",
+      "2026-09-18T09:00:00"
+    );
+    expect(draft.bonus).toBe(200);
+    expect(draft.bonusEligible).toBe(true);
+    expect(draft.payday).toBe("2026-10-10");
+  });
+});
+
+describe("hidden effective-rate UI", () => {
+  it("does not show effective hourly rate labels in the main UI pages", () => {
+    const files = ["app/jobs/page.tsx", "app/income/page.tsx", "app/settings/page.tsx"].map((file) => readFileSync(file, "utf8")).join("\n");
+    expect(files).not.toContain("有效時薪");
+    expect(files).not.toContain("有效平均時薪");
   });
 });

@@ -18,6 +18,8 @@ export type ScheduleMode = "weekly" | "biweekly" | "irregular" | "single";
 
 export type RepeatType = "none" | "weekly" | "biweekly" | "custom_dates";
 
+export type PaydayRule = "same_day" | "next_month_5" | "next_month_10" | "custom_date";
+
 export type EventStatus =
   | "scheduled"
   | "completed"
@@ -76,6 +78,7 @@ export type CalendarEvent = {
   color?: string;
   isCompleted: boolean;
   isPaid: boolean;
+  paydayRule?: PaydayRule;
   payday?: string;
 };
 
@@ -143,6 +146,8 @@ export type Job = {
   contactName: string;
   contactInfo: string;
   payday: string;
+  paydayRule?: PaydayRule;
+  customPayday?: string;
   isActive: boolean;
   isPinned?: boolean;
   lastUsedAt?: string;
@@ -187,6 +192,8 @@ export type TutorStudent = {
   isActive?: boolean;
   isPinned?: boolean;
   lastUsedAt?: string;
+  paydayRule?: PaydayRule;
+  customPayday?: string;
   scheduleMode?: ScheduleMode;
   scheduleWeekday?: number;
   scheduleStartTime?: string;
@@ -235,6 +242,7 @@ export type UserSettings = {
 
 export type AppData = {
   storageVersion: number;
+  demoCleanupVersion?: number;
   events: CalendarEvent[];
   courses: Course[];
   jobs: Job[];

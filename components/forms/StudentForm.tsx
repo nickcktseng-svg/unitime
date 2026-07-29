@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import type { TutorStudent } from "@/types";
+import type { PaydayRule, TutorStudent } from "@/types";
 import { Button } from "@/components/ui/Button";
-import { Field, TextArea, TextInput } from "@/components/ui/Field";
+import { Field, SelectInput, TextArea, TextInput } from "@/components/ui/Field";
+import { paydayRuleLabels } from "@/lib/payday";
 
 function emptyStudent(makeId: (prefix: string) => string): TutorStudent {
   return {
@@ -20,6 +21,8 @@ function emptyStudent(makeId: (prefix: string) => string): TutorStudent {
     color: "#ef4444",
     location: "",
     isActive: true,
+    paydayRule: "same_day",
+    customPayday: "",
     parentContact: "",
     learningGoal: "",
     materials: "",
@@ -53,7 +56,9 @@ export function StudentForm({
     defaultBonus: student?.defaultBonus ?? 0,
     color: student?.color ?? "#ef4444",
     location: student?.location ?? "",
-    isActive: student?.isActive ?? true
+    isActive: student?.isActive ?? true,
+    paydayRule: student?.paydayRule ?? "same_day",
+    customPayday: student?.customPayday ?? ""
   }));
   const [error, setError] = useState("");
 
@@ -62,7 +67,8 @@ export function StudentForm({
     onSave({
       ...draft,
       displayName: draft.displayName?.trim() || draft.name,
-      hourlyRate: draft.defaultHourlyRate ?? draft.hourlyRate
+      hourlyRate: draft.defaultHourlyRate ?? draft.hourlyRate,
+      customPayday: draft.paydayRule === "custom_date" ? draft.customPayday : undefined
     });
   }
 
@@ -119,6 +125,20 @@ export function StudentForm({
         <Field label="地點 可選">
           <TextInput value={draft.location ?? ""} onChange={(event) => setDraft({ ...draft, location: event.target.value })} />
         </Field>
+        <Field label="領薪方式">
+          <SelectInput value={draft.paydayRule ?? "same_day"} onChange={(event) => setDraft({ ...draft, paydayRule: event.target.value as PaydayRule })}>
+            {Object.entries(paydayRuleLabels).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </SelectInput>
+        </Field>
+        {draft.paydayRule === "custom_date" ? (
+          <Field label="自定義領薪日">
+            <TextInput type="date" value={draft.customPayday ?? ""} onChange={(event) => setDraft({ ...draft, customPayday: event.target.value })} />
+          </Field>
+        ) : null}
         <label className="flex items-center gap-2 text-sm font-bold">
           <input type="checkbox" checked={draft.isActive ?? true} onChange={(event) => setDraft({ ...draft, isActive: event.target.checked })} />
           仍在上課
