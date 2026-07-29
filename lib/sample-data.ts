@@ -197,7 +197,7 @@ export const sampleJobs = officialJobs;
 export const sampleStudents = officialStudents;
 
 export const sampleData: AppData = {
-  storageVersion: 3,
+  storageVersion: 4,
   demoCleanupVersion: 1,
   events: sampleEvents,
   courses: sampleCourses,

@@ -31,7 +31,7 @@ export default function JobsPage() {
           includeCommuteTime: data.settings.includeCommuteTimeInEffectiveRate,
           includeReportTime: data.settings.includeReportTimeInEffectiveRate
         };
-        const monthIncome = calculateMonthlyIncome(data.events, data.jobs, currentMonth(), options);
+        const monthIncome = calculateMonthlyIncome(data.events, data.jobs, currentMonth(), options, data.students);
         const filteredJobs = data.jobs.filter((job) => `${job.name}${job.location}${jobTypeLabels[job.type]}`.includes(query));
 
         return (

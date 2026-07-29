@@ -3,7 +3,7 @@ import type { CalendarEvent } from "@/types";
 import { calculateEstimatedEventIncome, calculateWorkHours } from "@/lib/calculations";
 import { findEventConflicts } from "@/lib/conflict-check";
 import { toDateTime } from "@/lib/date-utils";
-import { resolvePaydayDate } from "@/lib/payday";
+import { calculateExpectedPayDate } from "@/lib/payday";
 
 export type CustomOccurrenceDraft = {
   id?: string;
@@ -91,6 +91,7 @@ export function buildCustomDateEvents(
 ) {
   return uniqueOccurrences(occurrences).map((occurrence, index) => {
     const start = toDateTime(occurrence.date, occurrence.startTime);
+    const expectedPayDate = source.paydayRule ? calculateExpectedPayDate(start, source.paydayRule, source.payday) : source.payday;
     return {
       ...source,
       id: occurrence.id ?? makeId("event"),
@@ -107,7 +108,9 @@ export function buildCustomDateEvents(
       customOccurrenceId: occurrence.id ?? `${groupId}-${index}`,
       sourceEventId: source.sourceEventId ?? source.id,
       isCustomOccurrence: true,
-      payday: source.paydayRule ? resolvePaydayDate(source.paydayRule, start, source.payday) : source.payday
+      payday: expectedPayDate,
+      expectedPayDate,
+      paidAt: source.isPaid ? source.paidAt || expectedPayDate : undefined
     };
   });
 }

@@ -1,7 +1,8 @@
 import type { AppData, CalendarEvent, Course, EventStatus, Holiday, Job, Semester, TutorStudent } from "@/types";
 import { officialJobs, officialStudents, sampleData } from "@/lib/sample-data";
+import { calculateExpectedPayDate } from "@/lib/payday";
 
-export const CURRENT_STORAGE_VERSION = 3;
+export const CURRENT_STORAGE_VERSION = 4;
 export const DEMO_CLEANUP_VERSION = 1;
 
 const demoCourseIds = new Set(["course-organic", "course-pchem", "course-instrument", "course-lab"]);
@@ -110,7 +111,10 @@ function migrateEvent(value: unknown, index: number): CalendarEvent {
     isCompleted: status === "completed" || isCompleted,
     isPaid: boolValue(event.isPaid),
     paydayRule: stringValue(event.paydayRule) as CalendarEvent["paydayRule"] || undefined,
-    payday: stringValue(event.payday) || undefined
+    payday: stringValue(event.payday) || undefined,
+    expectedPayDate: stringValue(event.expectedPayDate) || undefined,
+    paidAt: stringValue(event.paidAt) || undefined,
+    paymentConfirmationStatus: stringValue(event.paymentConfirmationStatus) as CalendarEvent["paymentConfirmationStatus"] || undefined
   };
 }
 
@@ -267,6 +271,36 @@ export function applyOfficialData(data: AppData) {
   };
 }
 
+function positive(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : undefined;
+}
+
+function backfillEventPaySnapshot(event: CalendarEvent, students: TutorStudent[], jobs: Job[]): CalendarEvent {
+  if (!event.countsForIncome) return event;
+  const student = event.studentId ? students.find((item) => item.id === event.studentId) : undefined;
+  const job = event.jobId ? jobs.find((item) => item.id === event.jobId) : undefined;
+  const paydayRule = event.paydayRule ?? student?.paydayRule ?? job?.paydayRule ?? "same_day";
+  const customPayDate = paydayRule === "custom_date" ? event.payday ?? student?.customPayday ?? job?.customPayday ?? job?.payday : undefined;
+  const expectedPayDate = event.expectedPayDate ?? calculateExpectedPayDate(event.start, paydayRule, customPayDate);
+  const isCancelled = ["student_cancelled", "user_cancelled", "mutually_cancelled", "rescheduled"].includes(event.status ?? "");
+  const needsConfirmation = expectedPayDate < new Date().toISOString().slice(0, 10) && !event.isPaid && !isCancelled;
+  const bonus = event.bonus ?? student?.defaultBonus ?? job?.defaultBonus ?? job?.reportBonus ?? 0;
+  return {
+    ...event,
+    hourlyRate: positive(event.hourlyRate) ?? positive(student?.defaultHourlyRate) ?? positive(student?.hourlyRate) ?? positive(job?.defaultHourlyRate) ?? positive(job?.hourlyRate),
+    fixedPay: positive(event.fixedPay) ?? positive(job?.defaultFixedPay) ?? positive(job?.fixedPay),
+    bonus,
+    bonusEligible: event.bonusEligible ?? bonus > 0,
+    location: event.location || student?.location || job?.location || "",
+    color: event.color || student?.color || job?.color,
+    paydayRule,
+    expectedPayDate,
+    isPaid: event.isPaid ?? false,
+    paidAt: event.paidAt,
+    paymentConfirmationStatus: event.paymentConfirmationStatus ?? (event.isPaid ? "confirmed" : needsConfirmation ? "needs_confirmation" : "pending")
+  };
+}
+
 function migrateSemester(value: unknown, index: number): Semester {
   const semester = isRecord(value) ? value : {};
   return {
@@ -317,5 +351,9 @@ export function migrateAppData(input: unknown): AppData {
   };
 
   const cleaned = numberValue(raw.demoCleanupVersion) >= DEMO_CLEANUP_VERSION ? migrated : removeDemoData(migrated);
-  return applyOfficialData({ ...cleaned, demoCleanupVersion: DEMO_CLEANUP_VERSION });
+  const withOfficialData = applyOfficialData({ ...cleaned, demoCleanupVersion: DEMO_CLEANUP_VERSION });
+  return {
+    ...withOfficialData,
+    events: withOfficialData.events.map((event) => backfillEventPaySnapshot(event, withOfficialData.students, withOfficialData.jobs))
+  };
 }

@@ -1,6 +1,6 @@
 import { addMinutes, format, parseISO } from "date-fns";
 import type { CalendarEvent, EventCategory, Job, TutorStudent } from "@/types";
-import { resolvePaydayDate } from "@/lib/payday";
+import { calculateExpectedPayDate } from "@/lib/payday";
 
 export type QuickTarget =
   | { kind: "student"; id: string; name: string; typeLabel: string; color: string; hourlyRate: number; durationMinutes: number; isPinned?: boolean; lastUsedAt?: string }
@@ -38,6 +38,8 @@ export function createStudentEventDraft(student: TutorStudent, makeId: (prefix: 
   const durationMinutes = student.defaultDurationMinutes ?? 120;
   const start = normalizeStart(startValue);
   const bonus = student.defaultBonus ?? 0;
+  const paydayRule = student.paydayRule ?? "same_day";
+  const expectedPayDate = calculateExpectedPayDate(start, paydayRule, student.customPayday);
   return {
     id: makeId("event"),
     title: `${student.displayName || student.name}家教`,
@@ -53,8 +55,9 @@ export function createStudentEventDraft(student: TutorStudent, makeId: (prefix: 
     bonusReceived: false,
     studentId: student.id,
     jobId: student.jobId,
-    paydayRule: student.paydayRule ?? "same_day",
-    payday: resolvePaydayDate(student.paydayRule ?? "same_day", start, student.customPayday),
+    paydayRule,
+    payday: expectedPayDate,
+    expectedPayDate,
     status: "scheduled",
     color: student.color,
     isCompleted: false,
@@ -67,6 +70,8 @@ export function createJobEventDraft(job: Job, makeId: (prefix: string) => string
   const start = normalizeStart(startValue);
   const bonus = job.defaultBonus ?? job.reportBonus ?? 0;
   const fixedPay = job.defaultFixedPay ?? job.fixedPay;
+  const paydayRule = job.paydayRule ?? "same_day";
+  const expectedPayDate = calculateExpectedPayDate(start, paydayRule, job.customPayday || job.payday);
   return {
     id: makeId("event"),
     title: job.name,
@@ -82,8 +87,9 @@ export function createJobEventDraft(job: Job, makeId: (prefix: string) => string
     bonusEligible: bonus > 0,
     bonusReceived: false,
     jobId: job.id,
-    paydayRule: job.paydayRule ?? "same_day",
-    payday: resolvePaydayDate(job.paydayRule ?? "same_day", start, job.customPayday || job.payday),
+    paydayRule,
+    payday: expectedPayDate,
+    expectedPayDate,
     status: "scheduled",
     color: job.color,
     isCompleted: false,

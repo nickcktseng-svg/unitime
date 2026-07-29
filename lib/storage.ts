@@ -1,9 +1,10 @@
 import type { AppData } from "@/types";
 import { sampleData } from "@/lib/sample-data";
-import { DEMO_CLEANUP_VERSION, migrateAppData } from "@/lib/migrations";
+import { CURRENT_STORAGE_VERSION, DEMO_CLEANUP_VERSION, migrateAppData } from "@/lib/migrations";
 
 export const STORAGE_KEY = "unitime-app-data-v1";
 const DEMO_CLEANUP_BACKUP_KEY = `${STORAGE_KEY}-before-demo-cleanup-v${DEMO_CLEANUP_VERSION}`;
+const SALARY_MIGRATION_BACKUP_KEY = `${STORAGE_KEY}-before-salary-migration-v${CURRENT_STORAGE_VERSION}`;
 
 export function loadAppData(): AppData {
   if (typeof window === "undefined") return sampleData;
@@ -16,6 +17,9 @@ export function loadAppData(): AppData {
     const parsed = JSON.parse(raw);
     if ((parsed?.demoCleanupVersion ?? 0) < DEMO_CLEANUP_VERSION && !window.localStorage.getItem(DEMO_CLEANUP_BACKUP_KEY)) {
       window.localStorage.setItem(DEMO_CLEANUP_BACKUP_KEY, raw);
+    }
+    if ((parsed?.storageVersion ?? 0) < CURRENT_STORAGE_VERSION && !window.localStorage.getItem(SALARY_MIGRATION_BACKUP_KEY)) {
+      window.localStorage.setItem(SALARY_MIGRATION_BACKUP_KEY, raw);
     }
     const migrated = migrateAppData(parsed);
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated));

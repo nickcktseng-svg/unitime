@@ -255,7 +255,7 @@ describe("migration compatibility", () => {
       students: [{ ...student, progressPercent: 60, records: [{ id: "legacy" }] }],
       settings: { semesterStart: "2026-09-01", semesterEnd: "2027-01-31" }
     });
-    expect(migrated.storageVersion).toBe(3);
+    expect(migrated.storageVersion).toBe(4);
     expect(migrated.events[0].status).toBe("completed");
     expect(migrated.students[0].legacyData?.progressPercent).toBe(60);
     expect(migrated.semesters).toHaveLength(1);

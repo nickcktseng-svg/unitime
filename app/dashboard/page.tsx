@@ -9,7 +9,7 @@ import { Card } from "@/components/ui/Card";
 import { StatCard } from "@/components/ui/StatCard";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { currentMonth, durationHours, formatTime } from "@/lib/date-utils";
-import { calculateMonthlyIncome, groupIncomeByMonth, groupIncomeBySource } from "@/lib/calculations";
+import { calculateMonthlyIncome, calculatePayMonthIncome, groupIncomeByMonth, groupIncomeBySource } from "@/lib/calculations";
 import { categoryMeta } from "@/lib/sample-data";
 
 const money = (value: number) => `NT$ ${Math.round(value).toLocaleString()}`;
@@ -36,7 +36,14 @@ export default function DashboardPage() {
           includeCommuteTime: data.settings.includeCommuteTimeInEffectiveRate,
           includeReportTime: data.settings.includeReportTimeInEffectiveRate
         };
-        const income = calculateMonthlyIncome(data.events, data.jobs, currentMonth(), options);
+        const income = calculateMonthlyIncome(data.events, data.jobs, currentMonth(), options, data.students);
+        const payIncome = calculatePayMonthIncome(data.events, data.jobs, currentMonth(), options, data.students);
+        const currentMonthSameDay = payIncome.records
+          .filter((record) => record.workMonth === currentMonth())
+          .reduce((sum, record) => sum + record.totalIncome, 0);
+        const previousWorkPay = payIncome.records
+          .filter((record) => record.workMonth !== currentMonth())
+          .reduce((sum, record) => sum + record.totalIncome, 0);
         const courseHours = weekEvents
           .filter((event) => event.category === "course")
           .reduce((sum, event) => sum + durationHours(event.start, event.end), 0);
@@ -68,8 +75,10 @@ export default function DashboardPage() {
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
               <StatCard label="本週總課堂時間" value={`${courseHours.toFixed(1)} 小時`} icon={<GraduationCap size={20} />} />
               <StatCard label="本週總工作時間" value={`${workHours.toFixed(1)} 小時`} icon={<BriefcaseBusiness size={20} />} />
-              <StatCard label="本月預估薪資" value={money(income.estimatedIncome)} icon={<Banknote size={20} />} />
-              <StatCard label="尚未領取薪資" value={money(income.unpaidIncome)} hint={`已完成 ${money(income.completedIncome)}`} icon={<CalendarClock size={20} />} />
+              <StatCard label="本月工作預估收入" value={money(income.totalIncome)} icon={<Banknote size={20} />} />
+              <StatCard label="本月應領薪資" value={money(payIncome.totalIncome)} hint={`其中上月工作 ${money(previousWorkPay)}`} icon={<CalendarClock size={20} />} />
+              <StatCard label="本月已領薪資" value={money(payIncome.paidIncome)} hint={`其中本月當日領 ${money(currentMonthSameDay)}`} icon={<Banknote size={20} />} />
+              <StatCard label="本月尚未領取" value={money(payIncome.unpaidIncome)} icon={<CalendarClock size={20} />} />
             </div>
             <div className="grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
               <Card>

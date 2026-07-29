@@ -5,7 +5,7 @@ import { useMemo, useState } from "react";
 import type { CalendarEvent, EventCategory, EventStatus, Job, PaydayRule, RepeatType, TutorStudent } from "@/types";
 import { findEventConflicts } from "@/lib/conflict-check";
 import { categoryMeta } from "@/lib/sample-data";
-import { calculateEventIncome, calculateEstimatedEventIncome, calculateWorkHours } from "@/lib/calculations";
+import { calculateEstimatedEventIncome, calculateWorkHours } from "@/lib/calculations";
 import { toDateTime } from "@/lib/date-utils";
 import {
   addCustomDate,
@@ -18,7 +18,7 @@ import {
   summarizeCustomDateEvents,
   type CustomOccurrenceDraft
 } from "@/lib/custom-dates";
-import { isCustomPaydayBeforeEvent, paydayRuleLabels, resolvePaydayDate } from "@/lib/payday";
+import { calculateExpectedPayDate, isCustomPaydayBeforeEvent, paydayRuleLabels, resolvePaydayDate } from "@/lib/payday";
 import { Button } from "@/components/ui/Button";
 import { Field, SelectInput, TextArea, TextInput } from "@/components/ui/Field";
 
@@ -50,6 +50,7 @@ type EventDraft = {
   isPaid: boolean;
   paydayRule: PaydayRule;
   payday: string;
+  paidAt: string;
 };
 
 const today = format(new Date(), "yyyy-MM-dd");
@@ -98,7 +99,8 @@ function fromEvent(event?: CalendarEvent, selectedDate = today): EventDraft {
     isCompleted: event?.isCompleted ?? false,
     isPaid: event?.isPaid ?? false,
     paydayRule,
-    payday: event?.payday ?? resolvePaydayDate(paydayRule, date)
+    payday: event?.payday ?? resolvePaydayDate(paydayRule, date),
+    paidAt: event?.paidAt ?? ""
   };
 }
 
@@ -208,13 +210,16 @@ export function EventForm({
       isCompleted: draft.status === "completed" || draft.isCompleted,
       isPaid: draft.isPaid,
       paydayRule: draft.paydayRule,
-      payday: draft.payday || undefined
+      payday: draft.payday || undefined,
+      expectedPayDate: calculateExpectedPayDate(toDateTime(draft.date, draft.startTime), draft.paydayRule, draft.payday),
+      paidAt: draft.isPaid ? draft.paidAt || draft.payday || draft.date : undefined,
+      paymentConfirmationStatus: draft.isPaid ? "confirmed" : undefined
     }),
     [cancellationType, draft, event, makeId, selectedJob?.color, selectedStudent?.color]
   );
 
   const conflicts = findEventConflicts(nextEvent, events);
-  const income = calculateEventIncome(nextEvent);
+  const income = calculateEstimatedEventIncome(nextEvent, selectedStudent, selectedJob);
   const hours = calculateWorkHours(nextEvent);
   const customEvents = useMemo(
     () => buildCustomDateEvents(nextEvent, customOccurrences, makeId, event?.groupId),
@@ -792,7 +797,14 @@ export function EventForm({
                   value={draft.status}
                   onChange={(event) => {
                     const status = event.target.value as EventStatus;
-                    setDraft({ ...draft, status, isCompleted: status === "completed" });
+                    const shouldMarkPaid = status === "completed" && draft.paydayRule === "same_day";
+                    setDraft({
+                      ...draft,
+                      status,
+                      isCompleted: status === "completed",
+                      isPaid: shouldMarkPaid ? true : draft.isPaid,
+                      paidAt: shouldMarkPaid ? draft.date : draft.paidAt
+                    });
                   }}
                 >
                   {Object.entries(statusLabels).map(([value, label]) => (
@@ -807,7 +819,13 @@ export function EventForm({
                   type="checkbox"
                   checked={draft.isCompleted}
                   onChange={(event) =>
-                    setDraft({ ...draft, isCompleted: event.target.checked, status: event.target.checked ? "completed" : "scheduled" })
+                    setDraft({
+                      ...draft,
+                      isCompleted: event.target.checked,
+                      status: event.target.checked ? "completed" : "scheduled",
+                      isPaid: event.target.checked && draft.paydayRule === "same_day" ? true : draft.isPaid,
+                      paidAt: event.target.checked && draft.paydayRule === "same_day" ? draft.date : draft.paidAt
+                    })
                   }
                 />
                 已完成
@@ -816,11 +834,16 @@ export function EventForm({
                 <input
                   type="checkbox"
                   checked={draft.isPaid}
-                  onChange={(event) => setDraft({ ...draft, isPaid: event.target.checked })}
+                  onChange={(event) => setDraft({ ...draft, isPaid: event.target.checked, paidAt: event.target.checked ? draft.paidAt || draft.payday || draft.date : "" })}
                 />
                 已領薪
               </label>
             </div>
+            {draft.isPaid ? (
+              <Field label="實際領薪日">
+                <TextInput type="date" value={draft.paidAt || draft.payday || draft.date} onChange={(event) => setDraft({ ...draft, paidAt: event.target.value })} />
+              </Field>
+            ) : null}
             {cancelStatuses.includes(draft.status) ? (
               <div className="grid gap-4 rounded-lg bg-white p-3 md:grid-cols-3 dark:bg-black/20">
                 <Field label="取消原因">

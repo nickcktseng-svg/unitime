@@ -85,7 +85,7 @@ export default function StudentsPage() {
                   const nextLesson = studentEvents
                     .filter((event) => isAfter(parseISO(event.start), new Date()) && event.status !== "student_cancelled")
                     .sort((a, b) => a.start.localeCompare(b.start))[0];
-                  const monthly = calculateMonthlyIncome(studentEvents, data.jobs, month, options);
+                  const monthly = calculateMonthlyIncome(studentEvents, data.jobs, month, options, data.students);
                   return (
                     <Card key={student.id} className="grid gap-4">
                       <div className="flex items-start justify-between gap-3">

@@ -20,6 +20,8 @@ export type RepeatType = "none" | "weekly" | "biweekly" | "custom_dates";
 
 export type PaydayRule = "same_day" | "next_month_5" | "next_month_10" | "custom_date";
 
+export type PaymentConfirmationStatus = "pending" | "needs_confirmation" | "confirmed";
+
 export type EventStatus =
   | "scheduled"
   | "completed"
@@ -80,6 +82,9 @@ export type CalendarEvent = {
   isPaid: boolean;
   paydayRule?: PaydayRule;
   payday?: string;
+  expectedPayDate?: string;
+  paidAt?: string;
+  paymentConfirmationStatus?: PaymentConfirmationStatus;
 };
 
 export type Course = {
@@ -270,4 +275,11 @@ export type IncomeRecord = {
   effectiveHours: number;
   isCompleted: boolean;
   isPaid: boolean;
+  workMonth: string;
+  payMonth: string;
+  expectedPayDate: string;
+  paidAt?: string;
+  hourlyRate: number;
+  fixedPay: number;
+  paymentStatus: "upcoming" | "due_today" | "needs_confirmation" | "paid";
 };

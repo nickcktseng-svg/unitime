@@ -8,12 +8,16 @@ export const paydayRuleLabels: Record<PaydayRule, string> = {
   custom_date: "自定義日期"
 };
 
-export function resolvePaydayDate(rule: PaydayRule | undefined, eventDate: string, customDate?: string) {
+export function calculateExpectedPayDate(eventDate: string, rule: PaydayRule | undefined, customDate?: string) {
   const date = parseISO(eventDate.slice(0, 10));
   if (rule === "next_month_5") return format(addMonths(date, 1), "yyyy-MM-05");
   if (rule === "next_month_10") return format(addMonths(date, 1), "yyyy-MM-10");
   if (rule === "custom_date") return customDate || "";
   return format(date, "yyyy-MM-dd");
+}
+
+export function resolvePaydayDate(rule: PaydayRule | undefined, eventDate: string, customDate?: string) {
+  return calculateExpectedPayDate(eventDate, rule, customDate);
 }
 
 export function isCustomPaydayBeforeEvent(eventDate: string, customDate?: string) {
