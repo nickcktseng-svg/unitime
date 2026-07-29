@@ -2,7 +2,7 @@
 
 import { format, parseISO } from "date-fns";
 import { useMemo, useState } from "react";
-import type { CalendarEvent, EventCategory, Job, TutorStudent } from "@/types";
+import type { CalendarEvent, EventCategory, EventStatus, Job, TutorStudent } from "@/types";
 import { findEventConflicts } from "@/lib/conflict-check";
 import { categoryMeta } from "@/lib/sample-data";
 import { calculateEventIncome, calculateWorkHours } from "@/lib/calculations";
@@ -26,14 +26,31 @@ type EventDraft = {
   hourlyRate: number;
   fixedPay: number;
   bonus: number;
+  bonusEligible: boolean;
+  bonusReceived: boolean;
   jobId: string;
   studentId: string;
+  status: EventStatus;
+  cancellationReason: string;
+  chargeOnCancellation: boolean;
+  cancellationPay: number;
   isCompleted: boolean;
   isPaid: boolean;
   payday: string;
 };
 
 const today = format(new Date(), "yyyy-MM-dd");
+const cancelStatuses: EventStatus[] = ["student_cancelled", "user_cancelled", "mutually_cancelled", "rescheduled"];
+
+const statusLabels: Record<EventStatus, string> = {
+  scheduled: "正常排定",
+  completed: "已完成",
+  student_cancelled: "學生請假",
+  user_cancelled: "我請假",
+  mutually_cancelled: "雙方取消",
+  rescheduled: "已改期",
+  pending: "尚未確認"
+};
 
 function fromEvent(event?: CalendarEvent, selectedDate = today): EventDraft {
   const start = event ? parseISO(event.start) : new Date(`${selectedDate}T09:00:00`);
@@ -54,8 +71,14 @@ function fromEvent(event?: CalendarEvent, selectedDate = today): EventDraft {
     hourlyRate: event?.hourlyRate ?? 0,
     fixedPay: event?.fixedPay ?? 0,
     bonus: event?.bonus ?? 0,
+    bonusEligible: event?.bonusEligible ?? Boolean(event?.bonus),
+    bonusReceived: event?.bonusReceived ?? Boolean(event?.isCompleted && event?.bonus),
     jobId: event?.jobId ?? "",
     studentId: event?.studentId ?? "",
+    status: event?.status ?? (event?.isCompleted ? "completed" : "scheduled"),
+    cancellationReason: event?.cancellationReason ?? "",
+    chargeOnCancellation: event?.chargeOnCancellation ?? false,
+    cancellationPay: event?.cancellationPay ?? 0,
     isCompleted: event?.isCompleted ?? false,
     isPaid: event?.isPaid ?? false,
     payday: event?.payday ?? ""
@@ -86,6 +109,9 @@ export function EventForm({
   const [draft, setDraft] = useState<EventDraft>(() => fromEvent(event, selectedDate));
   const [forceSave, setForceSave] = useState(false);
   const [error, setError] = useState("");
+  const selectedJob = jobs.find((job) => job.id === draft.jobId);
+  const selectedStudent = students.find((student) => student.id === draft.studentId);
+  const cancellationType = cancelStatuses.includes(draft.status) ? draft.status as CalendarEvent["cancellationType"] : undefined;
 
   const nextEvent: CalendarEvent = useMemo(
     () => ({
@@ -108,18 +134,61 @@ export function EventForm({
       hourlyRate: Number(draft.hourlyRate) || undefined,
       fixedPay: Number(draft.fixedPay) || undefined,
       bonus: Number(draft.bonus) || undefined,
+      bonusEligible: draft.bonusEligible,
+      bonusReceived: draft.bonusReceived,
       jobId: draft.jobId || undefined,
       studentId: draft.studentId || undefined,
-      isCompleted: draft.isCompleted,
+      courseId: event?.courseId,
+      semesterId: event?.semesterId,
+      seriesId: event?.seriesId,
+      isException: event?.isException,
+      originalEventDate: event?.originalEventDate,
+      status: draft.status,
+      cancellationReason: draft.cancellationReason || undefined,
+      cancellationType,
+      chargeOnCancellation: draft.status === "student_cancelled" ? draft.chargeOnCancellation : false,
+      cancellationPay: draft.status === "student_cancelled" && draft.chargeOnCancellation ? Number(draft.cancellationPay) || 0 : undefined,
+      rescheduledFromEventId: event?.rescheduledFromEventId,
+      rescheduledToEventId: event?.rescheduledToEventId,
+      color: event?.color ?? selectedStudent?.color ?? selectedJob?.color,
+      isCompleted: draft.status === "completed" || draft.isCompleted,
       isPaid: draft.isPaid,
       payday: draft.payday || undefined
     }),
-    [draft, event?.id, makeId]
+    [cancellationType, draft, event, makeId, selectedJob?.color, selectedStudent?.color]
   );
 
   const conflicts = findEventConflicts(nextEvent, events);
   const income = calculateEventIncome(nextEvent);
   const hours = calculateWorkHours(nextEvent);
+
+  function updateStudent(studentId: string) {
+    const student = students.find((item) => item.id === studentId);
+    setDraft({
+      ...draft,
+      studentId,
+      category: studentId ? "tutoring" : draft.category,
+      title: !draft.title && student ? `${student.displayName || student.name}家教` : draft.title,
+      hourlyRate: student?.defaultHourlyRate ?? student?.hourlyRate ?? draft.hourlyRate,
+      location: draft.location,
+      countsForIncome: studentId ? true : draft.countsForIncome
+    });
+  }
+
+  function updateJob(jobId: string) {
+    const job = jobs.find((item) => item.id === jobId);
+    setDraft({
+      ...draft,
+      jobId,
+      title: !draft.title && job ? job.name : draft.title,
+      category: job?.type === "tutoring" ? "tutoring" : job?.type === "lab" ? "lab" : job?.type === "cram_school" ? "cram_school" : draft.category,
+      hourlyRate: job?.defaultHourlyRate ?? job?.hourlyRate ?? draft.hourlyRate,
+      fixedPay: job?.fixedPay ?? draft.fixedPay,
+      bonus: job?.reportBonus ?? draft.bonus,
+      bonusEligible: Boolean(job?.reportBonus) || draft.bonusEligible,
+      countsForIncome: jobId ? true : draft.countsForIncome
+    });
+  }
 
   function save() {
     if (!draft.title.trim()) {
@@ -197,7 +266,7 @@ export function EventForm({
           <TextInput value={draft.location} onChange={(event) => setDraft({ ...draft, location: event.target.value })} />
         </Field>
         <Field label="關聯工作">
-          <SelectInput value={draft.jobId} onChange={(event) => setDraft({ ...draft, jobId: event.target.value })}>
+          <SelectInput value={draft.jobId} onChange={(event) => updateJob(event.target.value)}>
             <option value="">無</option>
             {jobs.map((job) => (
               <option key={job.id} value={job.id}>
@@ -207,7 +276,7 @@ export function EventForm({
           </SelectInput>
         </Field>
         <Field label="關聯學生">
-          <SelectInput value={draft.studentId} onChange={(event) => setDraft({ ...draft, studentId: event.target.value })}>
+          <SelectInput value={draft.studentId} onChange={(event) => updateStudent(event.target.value)}>
             <option value="">無</option>
             {students.map((student) => (
               <option key={student.id} value={student.id}>
@@ -301,7 +370,7 @@ export function EventForm({
                   onChange={(event) => setDraft({ ...draft, fixedPay: Number(event.target.value) })}
                 />
               </Field>
-              <Field label="每次獎金">
+              <Field label="本次獎金">
                 <TextInput
                   min={0}
                   type="number"
@@ -321,8 +390,46 @@ export function EventForm({
               <label className="flex items-center gap-2">
                 <input
                   type="checkbox"
+                  checked={draft.bonusEligible}
+                  onChange={(event) => setDraft({ ...draft, bonusEligible: event.target.checked })}
+                />
+                符合獎金條件
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={draft.bonusReceived}
+                  onChange={(event) => setDraft({ ...draft, bonusReceived: event.target.checked })}
+                />
+                已取得獎金
+              </label>
+              <p className="rounded-lg bg-white px-3 py-2 dark:bg-black/20">
+                {hours.toFixed(1)} 小時 / NT$ {Math.round(income).toLocaleString()}
+              </p>
+            </div>
+            <div className="grid gap-4 md:grid-cols-3">
+              <Field label="事件狀態">
+                <SelectInput
+                  value={draft.status}
+                  onChange={(event) => {
+                    const status = event.target.value as EventStatus;
+                    setDraft({ ...draft, status, isCompleted: status === "completed" });
+                  }}
+                >
+                  {Object.entries(statusLabels).map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </SelectInput>
+              </Field>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
                   checked={draft.isCompleted}
-                  onChange={(event) => setDraft({ ...draft, isCompleted: event.target.checked })}
+                  onChange={(event) =>
+                    setDraft({ ...draft, isCompleted: event.target.checked, status: event.target.checked ? "completed" : "scheduled" })
+                  }
                 />
                 已完成
               </label>
@@ -334,10 +441,37 @@ export function EventForm({
                 />
                 已領薪
               </label>
-              <p className="rounded-lg bg-white px-3 py-2 dark:bg-black/20">
-                {hours.toFixed(1)} 小時 / NT$ {Math.round(income).toLocaleString()}
-              </p>
             </div>
+            {cancelStatuses.includes(draft.status) ? (
+              <div className="grid gap-4 rounded-lg bg-white p-3 md:grid-cols-3 dark:bg-black/20">
+                <Field label="取消原因">
+                  <TextInput
+                    value={draft.cancellationReason}
+                    onChange={(event) => setDraft({ ...draft, cancellationReason: event.target.value })}
+                  />
+                </Field>
+                {draft.status === "student_cancelled" ? (
+                  <>
+                    <label className="flex items-center gap-2 text-sm font-bold">
+                      <input
+                        type="checkbox"
+                        checked={draft.chargeOnCancellation}
+                        onChange={(event) => setDraft({ ...draft, chargeOnCancellation: event.target.checked })}
+                      />
+                      本次仍計薪
+                    </label>
+                    <Field label="取消費">
+                      <TextInput
+                        min={0}
+                        type="number"
+                        value={draft.cancellationPay}
+                        onChange={(event) => setDraft({ ...draft, cancellationPay: Number(event.target.value) })}
+                      />
+                    </Field>
+                  </>
+                ) : null}
+              </div>
+            ) : null}
           </>
         ) : null}
       </div>

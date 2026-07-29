@@ -6,6 +6,7 @@ import timeGridPlugin from "@fullcalendar/timegrid";
 import interactionPlugin from "@fullcalendar/interaction";
 import type { EventClickArg, EventDropArg } from "@fullcalendar/core";
 import type { DateClickArg, EventResizeDoneArg } from "@fullcalendar/interaction";
+import { Check, HelpCircle, RotateCw, Slash } from "lucide-react";
 import { useState } from "react";
 import { AppShell } from "@/components/layout/AppShell";
 import { Button } from "@/components/ui/Button";
@@ -14,40 +15,151 @@ import { Modal } from "@/components/ui/Modal";
 import { EventForm } from "@/components/forms/EventForm";
 import { categoryMeta } from "@/lib/sample-data";
 import { expandRecurringEvents } from "@/hooks/useCalendarEvents";
-import type { CalendarEvent } from "@/types";
+import type { CalendarEvent, EventStatus } from "@/types";
+
+function statusIcon(status?: EventStatus) {
+  if (status === "completed") return "✓ ";
+  if (status === "pending") return "? ";
+  if (status === "rescheduled") return "↪ ";
+  if (status?.includes("cancelled")) return "⊘ ";
+  return "";
+}
 
 export default function CalendarPage() {
   const [editingEvent, setEditingEvent] = useState<CalendarEvent | undefined>();
   const [selectedDate, setSelectedDate] = useState<string | undefined>();
   const [modalOpen, setModalOpen] = useState(false);
+  const [hiddenKeys, setHiddenKeys] = useState<string[]>([]);
+  const [activeEventId, setActiveEventId] = useState<string | undefined>();
 
   return (
     <AppShell>
       {({ data, actions }) => {
-        const fcEvents = expandRecurringEvents(data.events).map((event) => ({
+        const expanded = expandRecurringEvents(data.events, data);
+        const legendItems = [
+          { key: "category-course", label: "課程", color: categoryMeta.course.color },
+          ...data.students.map((student) => ({ key: `student-${student.id}`, label: student.displayName || student.name, color: student.color ?? "#ef4444" })),
+          ...data.jobs.map((job) => ({ key: `job-${job.id}`, label: job.name, color: job.color })),
+          { key: "holidays", label: "假日", color: "#facc15" },
+          { key: "status-cancelled", label: "取消", color: "#94a3b8" },
+          { key: "status-pending", label: "尚未確認", color: "#64748b" }
+        ];
+        const holidayEvents = data.holidays
+          .filter(() => !hiddenKeys.includes("holidays"))
+          .map((holiday) => ({
+            id: `holiday-${holiday.id}`,
+            title: holiday.name,
+            start: holiday.date,
+            end: holiday.endDate,
+            display: "background",
+            color: holiday.type === "makeup" ? "#dcfce7" : "#fef3c7"
+          }));
+        const fcEvents = expanded.filter((event) => {
+          if (event.category === "course" && hiddenKeys.includes("category-course")) return false;
+          if (event.studentId && hiddenKeys.includes(`student-${event.studentId}`)) return false;
+          if (event.jobId && hiddenKeys.includes(`job-${event.jobId}`)) return false;
+          if (event.status?.includes("cancelled") && hiddenKeys.includes("status-cancelled")) return false;
+          if (event.status === "pending" && hiddenKeys.includes("status-pending")) return false;
+          return true;
+        }).map((event) => {
+          const course = data.courses.find((item) => item.id === event.courseId);
+          const student = data.students.find((item) => item.id === event.studentId);
+          const job = data.jobs.find((item) => item.id === event.jobId);
+          const color = event.color ?? student?.color ?? job?.color ?? course?.color ?? categoryMeta[event.category].color;
+          const isCancelled = event.status?.includes("cancelled");
+          return {
           id: event.id,
-          title: event.title,
+          title: `${statusIcon(event.status)}${event.title}`,
           start: event.start,
           end: event.end,
-          color: categoryMeta[event.category].color,
+          color,
+          borderColor: event.status === "pending" ? "#111827" : color,
+          textColor: "#ffffff",
+          classNames: [isCancelled ? "unitime-event-cancelled" : "", event.status === "pending" ? "unitime-event-pending" : ""].filter(Boolean),
           extendedProps: event
-        }));
+        };
+        });
 
         function openNew(date?: string) {
           setEditingEvent(undefined);
           setSelectedDate(date);
+          setActiveEventId(undefined);
           setModalOpen(true);
         }
 
         function updateEventTime(id: string, start?: Date | null, end?: Date | null) {
           const baseId = id.split("__")[0];
-          const event = data.events.find((item) => item.id === baseId);
+          const event = expanded.find((item) => item.id === id) ?? data.events.find((item) => item.id === baseId);
           if (!event || !start) return;
           actions.upsertEvent({
             ...event,
+            id: id.includes("__") ? actions.makeId("exception") : baseId,
+            seriesId: id.includes("__") ? baseId : event.seriesId,
+            isException: id.includes("__") ? true : event.isException,
+            originalEventDate: id.includes("__") ? event.originalEventDate ?? event.start.slice(0, 10) : event.originalEventDate,
             start: start.toISOString(),
             end: (end ?? start).toISOString(),
             repeatRule: undefined
+          });
+        }
+
+        function editOccurrence(id: string) {
+          const baseId = id.split("__")[0];
+          const occurrence = expanded.find((event) => event.id === id);
+          if (!occurrence) return;
+          setActiveEventId(id);
+          setEditingEvent(id.includes("__")
+            ? {
+                ...occurrence,
+                id: actions.makeId("exception"),
+                seriesId: baseId,
+                isException: true,
+                originalEventDate: occurrence.originalEventDate ?? occurrence.start.slice(0, 10),
+                repeatRule: undefined
+              }
+            : data.events.find((event) => event.id === baseId));
+          setModalOpen(true);
+        }
+
+        function cancelOccurrence(id: string) {
+          const baseId = id.split("__")[0];
+          const occurrence = expanded.find((event) => event.id === id);
+          if (!occurrence) return;
+          actions.upsertEvent({
+            ...occurrence,
+            id: id.includes("__") ? actions.makeId("exception") : baseId,
+            seriesId: id.includes("__") ? baseId : occurrence.seriesId,
+            isException: id.includes("__") ? true : occurrence.isException,
+            originalEventDate: occurrence.originalEventDate ?? occurrence.start.slice(0, 10),
+            repeatRule: undefined,
+            status: "student_cancelled",
+            cancellationType: "student_cancelled",
+            cancellationReason: "本次取消",
+            chargeOnCancellation: false,
+            isCompleted: false
+          });
+          setModalOpen(false);
+        }
+
+        function editWholeSeries(id: string) {
+          const baseId = id.split("__")[0];
+          setEditingEvent(data.events.find((event) => event.id === baseId));
+        }
+
+        function editFutureSeries(id: string) {
+          const baseId = id.split("__")[0];
+          const occurrence = expanded.find((event) => event.id === id);
+          const base = data.events.find((event) => event.id === baseId);
+          if (!base || !occurrence) return;
+          setEditingEvent({
+            ...base,
+            id: actions.makeId("series"),
+            repeatRule: base.repeatRule
+              ? {
+                  ...base.repeatRule,
+                  startDate: occurrence.originalEventDate ?? occurrence.start.slice(0, 10)
+                }
+              : undefined
           });
         }
 
@@ -78,29 +190,78 @@ export default function CalendarPage() {
                 height="auto"
                 slotMinTime="08:00:00"
                 slotMaxTime="23:00:00"
-                events={fcEvents}
+                events={[...holidayEvents, ...fcEvents]}
                 dateClick={(arg: DateClickArg) => openNew(arg.dateStr.slice(0, 10))}
                 eventClick={(arg: EventClickArg) => {
-                  setEditingEvent(data.events.find((event) => event.id === arg.event.id.split("__")[0]));
-                  setModalOpen(true);
+                  if (arg.event.id.startsWith("holiday-")) return;
+                  editOccurrence(arg.event.id);
                 }}
                 eventDrop={(arg: EventDropArg) => updateEventTime(arg.event.id, arg.event.start, arg.event.end)}
                 eventResize={(arg: EventResizeDoneArg) => updateEventTime(arg.event.id, arg.event.start, arg.event.end)}
               />
             </Card>
             <Card>
-              <h3 className="mb-3 font-black">類型顏色圖例</h3>
+              <h3 className="mb-3 font-black">顏色圖例</h3>
               <div className="flex flex-wrap gap-2">
-                {Object.entries(categoryMeta).map(([key, meta]) => (
-                  <span key={key} className="inline-flex items-center gap-2 rounded-lg bg-ink/5 px-3 py-2 text-sm font-bold dark:bg-white/10">
-                    <span className="h-3 w-3 rounded-full" style={{ backgroundColor: meta.color }} />
-                    {meta.label}
-                  </span>
+                {legendItems.map((item) => (
+                  <button
+                    key={item.key}
+                    type="button"
+                    className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-bold ${
+                      hiddenKeys.includes(item.key) ? "bg-ink/5 opacity-45 dark:bg-white/10" : "bg-ink/5 dark:bg-white/10"
+                    }`}
+                    onClick={() =>
+                      setHiddenKeys((current) =>
+                        current.includes(item.key) ? current.filter((key) => key !== item.key) : [...current, item.key]
+                      )
+                    }
+                  >
+                    <span className="h-3 w-3 rounded-full" style={{ backgroundColor: item.color }} />
+                    {item.label}
+                  </button>
                 ))}
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2 text-xs font-bold text-ink/60 dark:text-white/60">
+                <span className="inline-flex items-center gap-1"><Check size={14} />已完成</span>
+                <span className="inline-flex items-center gap-1"><HelpCircle size={14} />尚未確認</span>
+                <span className="inline-flex items-center gap-1"><Slash size={14} />已取消</span>
+                <span className="inline-flex items-center gap-1"><RotateCw size={14} />已改期</span>
               </div>
             </Card>
             {modalOpen ? (
               <Modal title={editingEvent ? "編輯事件" : "新增事件"} onClose={() => setModalOpen(false)}>
+                {editingEvent?.isException ? (
+                  <div className="mb-3 rounded-lg bg-ink/5 p-3 text-sm font-bold dark:bg-white/10">
+                    這是單次例外，儲存後不會影響其他重複事件。
+                  </div>
+                ) : null}
+                {activeEventId?.includes("__") ? (
+                  <div className="mb-3 flex flex-wrap gap-2 rounded-lg bg-ink/5 p-3 dark:bg-white/10">
+                    <Button type="button" variant="secondary" onClick={() => editOccurrence(activeEventId)}>
+                      編輯本次
+                    </Button>
+                    <Button type="button" variant="secondary" onClick={() => editFutureSeries(activeEventId)}>
+                      編輯本次及未來
+                    </Button>
+                    <Button type="button" variant="secondary" onClick={() => editWholeSeries(activeEventId)}>
+                      編輯整個排程
+                    </Button>
+                    <Button type="button" variant="ghost" onClick={() => cancelOccurrence(activeEventId)}>
+                      取消本次
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="danger"
+                      onClick={() => {
+                        if (!window.confirm("確定刪除整個固定排程？")) return;
+                        actions.deleteEvent(activeEventId.split("__")[0]);
+                        setModalOpen(false);
+                      }}
+                    >
+                      刪除整個排程
+                    </Button>
+                  </div>
+                ) : null}
                 <EventForm
                   event={editingEvent}
                   events={data.events}
@@ -113,7 +274,8 @@ export default function CalendarPage() {
                     setModalOpen(false);
                   }}
                   onDelete={(id) => {
-                    actions.deleteEvent(id);
+                    const baseId = id.split("__")[0];
+                    actions.deleteEvent(baseId);
                     setModalOpen(false);
                   }}
                   onCancel={() => setModalOpen(false)}

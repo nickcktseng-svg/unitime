@@ -51,6 +51,15 @@ body {
   padding: 2px 4px;
 }
 
+.fc-event.unitime-event-cancelled {
+  opacity: 0.45;
+  text-decoration: line-through;
+}
+
+.fc-event.unitime-event-pending {
+  border: 2px dashed currentColor !important;
+}
+
 input,
 select,
 textarea {

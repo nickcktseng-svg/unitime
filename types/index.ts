@@ -14,11 +14,25 @@ export type EventCategory =
 
 export type JobType = "tutoring" | "cram_school" | "lab" | "food" | "admin" | "other";
 
+export type ScheduleMode = "weekly" | "biweekly" | "irregular" | "single";
+
+export type EventStatus =
+  | "scheduled"
+  | "completed"
+  | "student_cancelled"
+  | "user_cancelled"
+  | "mutually_cancelled"
+  | "rescheduled"
+  | "pending";
+
+export type HolidayType = "national" | "school" | "custom_stop" | "makeup";
+
 export type RepeatRule = {
   enabled: boolean;
   weekdays: number[];
   startDate: string;
   endDate: string;
+  intervalWeeks?: 1 | 2;
 };
 
 export type CalendarEvent = {
@@ -34,8 +48,25 @@ export type CalendarEvent = {
   hourlyRate?: number;
   fixedPay?: number;
   bonus?: number;
+  bonusEligible?: boolean;
+  bonusReceived?: boolean;
   jobId?: string;
   studentId?: string;
+  courseId?: string;
+  semesterId?: string;
+  seriesId?: string;
+  isException?: boolean;
+  originalEventDate?: string;
+  overrideFields?: Record<string, unknown>;
+  status?: EventStatus;
+  cancellationReason?: string;
+  cancellationType?: Exclude<EventStatus, "scheduled" | "completed" | "pending">;
+  chargeOnCancellation?: boolean;
+  cancellationPay?: number;
+  rescheduledFromEventId?: string;
+  rescheduledToEventId?: string;
+  isHolidayExcluded?: boolean;
+  color?: string;
   isCompleted: boolean;
   isPaid: boolean;
   payday?: string;
@@ -54,6 +85,31 @@ export type Course = {
   notes: string;
   semesterStart: string;
   semesterEnd: string;
+  semesterId?: string;
+  excludeNationalHolidays?: boolean;
+  excludeSchoolHolidays?: boolean;
+};
+
+export type Semester = {
+  id: string;
+  name: string;
+  startDate: string;
+  endDate: string;
+  isCurrent: boolean;
+  classStartDate: string;
+  classEndDate: string;
+  notes: string;
+};
+
+export type Holiday = {
+  id: string;
+  date: string;
+  endDate?: string;
+  name: string;
+  type: HolidayType;
+  cancelsClasses: boolean;
+  stopsFixedWork: boolean;
+  notes: string;
 };
 
 export type Job = {
@@ -66,6 +122,12 @@ export type Job = {
   fixedPay?: number;
   reportBonus?: number;
   extraBonus?: number;
+  defaultDurationMinutes?: number;
+  defaultHourlyRate?: number;
+  scheduleMode?: ScheduleMode;
+  workOnNationalHolidays?: boolean;
+  workOnSchoolHolidays?: boolean;
+  defaultCancelOnHolidays?: boolean;
   commuteMinutes: number;
   prepMinutes: number;
   reportMinutes: number;
@@ -101,10 +163,23 @@ export type LessonRecord = {
 export type TutorStudent = {
   id: string;
   name: string;
+  displayName?: string;
   grade: string;
   subject: string;
   weeklySchedule: string;
   hourlyRate: number;
+  defaultHourlyRate?: number;
+  defaultDurationMinutes?: number;
+  color?: string;
+  isActive?: boolean;
+  scheduleMode?: ScheduleMode;
+  scheduleWeekday?: number;
+  scheduleStartTime?: string;
+  scheduleEndTime?: string;
+  scheduleEffectiveDate?: string;
+  scheduleEndDate?: string;
+  excludeNationalHolidays?: boolean;
+  excludeSchoolHolidays?: boolean;
   parentContact: string;
   learningGoal: string;
   materials: string;
@@ -116,6 +191,7 @@ export type TutorStudent = {
   notes: string;
   jobId?: string;
   records: LessonRecord[];
+  legacyData?: Record<string, unknown>;
 };
 
 export type UserSettings = {
@@ -143,10 +219,13 @@ export type UserSettings = {
 };
 
 export type AppData = {
+  storageVersion: number;
   events: CalendarEvent[];
   courses: Course[];
   jobs: Job[];
   students: TutorStudent[];
+  semesters: Semester[];
+  holidays: Holiday[];
   settings: UserSettings;
 };
 
@@ -161,6 +240,10 @@ export type IncomeRecord = {
   baseIncome: number;
   bonus: number;
   totalIncome: number;
+  estimatedIncome: number;
+  actualIncome: number;
+  cancellationLoss: number;
+  status: EventStatus;
   effectiveHours: number;
   isCompleted: boolean;
   isPaid: boolean;

@@ -9,24 +9,31 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Modal } from "@/components/ui/Modal";
 import { CourseForm } from "@/components/forms/CourseForm";
 import { minutesFromTime, timeFromMinutes, weekdayNames } from "@/lib/date-utils";
-import type { Course } from "@/types";
+import type { Course, Semester } from "@/types";
 
-function courseToCalendarEvent(course: Course) {
+function courseToCalendarEvent(course: Course, semesters: Semester[]) {
+  const semester = semesters.find((item) => item.id === course.semesterId);
+  const startDate = semester?.classStartDate ?? course.semesterStart;
+  const endDate = semester?.classEndDate ?? course.semesterEnd;
   return {
     id: `event-${course.id}`,
     title: course.name,
     category: "course" as const,
-    start: `${course.semesterStart}T${course.startTime}:00`,
-    end: `${course.semesterStart}T${course.endTime}:00`,
+    start: `${startDate}T${course.startTime}:00`,
+    end: `${startDate}T${course.endTime}:00`,
     location: course.room,
     notes: `${course.teacher} ${course.notes}`,
     repeatRule: {
       enabled: true,
       weekdays: [course.weekday],
-      startDate: course.semesterStart,
-      endDate: course.semesterEnd
+      startDate,
+      endDate
     },
     countsForIncome: false,
+    courseId: course.id,
+    semesterId: course.semesterId,
+    color: course.color,
+    status: "scheduled" as const,
     isCompleted: false,
     isPaid: false
   };
@@ -195,11 +202,12 @@ export default function CoursesPage() {
               <Modal title={editingCourse ? "編輯課程" : "新增課程"} onClose={() => setModalOpen(false)}>
                 <CourseForm
                   course={editingCourse}
+                  semesters={data.semesters}
                   makeId={actions.makeId}
                   onCancel={() => setModalOpen(false)}
                   onSave={(course) => {
                     actions.upsertCourse(course);
-                    actions.upsertEvent(courseToCalendarEvent(course));
+                    actions.upsertEvent(courseToCalendarEvent(course, data.semesters));
                     setModalOpen(false);
                   }}
                 />

@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import type { AppData, CalendarEvent, Course, Job, TutorStudent, UserSettings } from "@/types";
+import type { AppData, CalendarEvent, Course, Holiday, Job, Semester, TutorStudent, UserSettings } from "@/types";
+import { migrateAppData } from "@/lib/migrations";
 import { clearAppData, loadAppData, makeId, saveAppData } from "@/lib/storage";
 import { sampleData } from "@/lib/sample-data";
 
@@ -69,6 +70,32 @@ export function useAppData() {
         setData((current) => ({ ...current, jobs: current.jobs.filter((job) => job.id !== id) }));
         notify("工作已刪除");
       },
+      upsertSemester(semester: Semester) {
+        setData((current) => ({
+          ...current,
+          semesters: current.semesters.some((item) => item.id === semester.id)
+            ? current.semesters.map((item) => (item.id === semester.id ? semester : item))
+            : [...current.semesters, semester]
+        }));
+        notify("學期已儲存");
+      },
+      deleteSemester(id: string) {
+        setData((current) => ({ ...current, semesters: current.semesters.filter((semester) => semester.id !== id) }));
+        notify("學期已刪除");
+      },
+      upsertHoliday(holiday: Holiday) {
+        setData((current) => ({
+          ...current,
+          holidays: current.holidays.some((item) => item.id === holiday.id)
+            ? current.holidays.map((item) => (item.id === holiday.id ? holiday : item))
+            : [...current.holidays, holiday]
+        }));
+        notify("假日已儲存");
+      },
+      deleteHoliday(id: string) {
+        setData((current) => ({ ...current, holidays: current.holidays.filter((holiday) => holiday.id !== id) }));
+        notify("假日已刪除");
+      },
       upsertStudent(student: TutorStudent) {
         setData((current) => ({
           ...current,
@@ -83,7 +110,7 @@ export function useAppData() {
         notify("設定已更新");
       },
       importData(nextData: AppData) {
-        setData(nextData);
+        setData(migrateAppData(nextData));
         notify("備份已匯入");
       },
       resetData() {

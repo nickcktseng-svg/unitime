@@ -36,6 +36,12 @@ export function JobForm({
       fixedPay: 0,
       reportBonus: 0,
       extraBonus: 0,
+      defaultDurationMinutes: 120,
+      defaultHourlyRate: 0,
+      scheduleMode: "irregular",
+      workOnNationalHolidays: false,
+      workOnSchoolHolidays: false,
+      defaultCancelOnHolidays: false,
       commuteMinutes: 30,
       prepMinutes: 30,
       reportMinutes: 15,
@@ -62,7 +68,11 @@ export function JobForm({
   function save() {
     if (!draft.name.trim()) return setError("請輸入工作名稱");
     if (draft.hourlyRate <= 0 && !draft.fixedPay) return setError("請輸入時薪或固定薪資");
-    onSave(draft);
+    onSave({
+      ...draft,
+      defaultHourlyRate: draft.defaultHourlyRate || draft.hourlyRate,
+      defaultDurationMinutes: draft.defaultDurationMinutes || Math.round(draft.fixedHours * 60)
+    });
   }
 
   return (
@@ -99,7 +109,7 @@ export function JobForm({
         <Field label="固定單次薪資">
           <TextInput min={0} type="number" value={draft.fixedPay ?? 0} onChange={(event) => setDraft({ ...draft, fixedPay: Number(event.target.value) })} />
         </Field>
-        <Field label="回報獎金">
+        <Field label="完成獎金">
           <TextInput min={0} type="number" value={draft.reportBonus ?? 0} onChange={(event) => setDraft({ ...draft, reportBonus: Number(event.target.value) })} />
         </Field>
         <Field label="其他獎金">
@@ -111,12 +121,36 @@ export function JobForm({
         <Field label="備課時間 分鐘">
           <TextInput min={0} type="number" value={draft.prepMinutes} onChange={(event) => setDraft({ ...draft, prepMinutes: Number(event.target.value) })} />
         </Field>
-        <Field label="回報時間 分鐘">
+        <Field label="完成紀錄時間 分鐘">
           <TextInput min={0} type="number" value={draft.reportMinutes} onChange={(event) => setDraft({ ...draft, reportMinutes: Number(event.target.value) })} />
         </Field>
         <Field label="發薪日">
           <TextInput value={draft.payday} onChange={(event) => setDraft({ ...draft, payday: event.target.value })} />
         </Field>
+        <label className="flex items-center gap-2 text-sm font-bold">
+          <input
+            type="checkbox"
+            checked={draft.workOnNationalHolidays ?? false}
+            onChange={(event) => setDraft({ ...draft, workOnNationalHolidays: event.target.checked })}
+          />
+          國定假日照常
+        </label>
+        <label className="flex items-center gap-2 text-sm font-bold">
+          <input
+            type="checkbox"
+            checked={draft.workOnSchoolHolidays ?? false}
+            onChange={(event) => setDraft({ ...draft, workOnSchoolHolidays: event.target.checked })}
+          />
+          學校假日照常
+        </label>
+        <label className="flex items-center gap-2 text-sm font-bold">
+          <input
+            type="checkbox"
+            checked={draft.defaultCancelOnHolidays ?? false}
+            onChange={(event) => setDraft({ ...draft, defaultCancelOnHolidays: event.target.checked })}
+          />
+          遇假日預設取消
+        </label>
         <Field label="聯絡人">
           <TextInput value={draft.contactName} onChange={(event) => setDraft({ ...draft, contactName: event.target.value })} />
         </Field>
@@ -141,9 +175,6 @@ export function JobForm({
           </Field>
           <Field label="科目">
             <TextInput value={draft.subject ?? ""} onChange={(event) => setDraft({ ...draft, subject: event.target.value })} />
-          </Field>
-          <Field label="家長聯絡方式">
-            <TextInput value={draft.parentContact ?? ""} onChange={(event) => setDraft({ ...draft, parentContact: event.target.value })} />
           </Field>
           <Field label="每週上課時間">
             <TextInput value={draft.weeklySchedule ?? ""} onChange={(event) => setDraft({ ...draft, weeklySchedule: event.target.value })} />

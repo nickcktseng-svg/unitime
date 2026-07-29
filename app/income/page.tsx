@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { StatCard } from "@/components/ui/StatCard";
 import { Field, SelectInput, TextInput } from "@/components/ui/Field";
-import { calculateMonthlyIncome, groupIncomeByJob, previousMonth } from "@/lib/calculations";
+import { calculateMonthlyIncome, groupIncomeBySource, previousMonth } from "@/lib/calculations";
 import { currentMonth, formatDateTime } from "@/lib/date-utils";
 import { categoryMeta } from "@/lib/sample-data";
 
@@ -30,23 +30,31 @@ export default function IncomePage() {
         const summary = calculateMonthlyIncome(data.events, data.jobs, month, options);
         const previous = calculateMonthlyIncome(data.events, data.jobs, previousMonth(month), options);
         const records = summary.records.filter((record) => {
-          const matchesJob = !jobFilter || record.jobId === jobFilter;
+          const matchesJob = !jobFilter || record.jobId === jobFilter || record.studentId === jobFilter;
           const matchesStatus =
             statusFilter === "all" ||
-            (statusFilter === "completed" && record.isCompleted) ||
+            (statusFilter === "completed" && record.status === "completed") ||
+            (statusFilter === "cancelled" && record.status.includes("cancelled")) ||
+            (statusFilter === "pending" && record.status === "pending") ||
             (statusFilter === "paid" && record.isPaid) ||
             (statusFilter === "unpaid" && !record.isPaid);
           return matchesJob && matchesStatus;
         });
-        const byJob = Object.entries(groupIncomeByJob(records)).map(([jobId, total]) => ({
-          job: data.jobs.find((item) => item.id === jobId)?.name ?? "未分類",
-          total
-        }));
+        const bySource = Object.values(groupIncomeBySource(records, data.jobs, data.students, "actual"));
         const diff = summary.totalIncome - previous.totalIncome;
+        const statusLabel = {
+          scheduled: "預估",
+          completed: "已完成",
+          student_cancelled: "學生請假",
+          user_cancelled: "我請假",
+          mutually_cancelled: "雙方取消",
+          rescheduled: "已改期",
+          pending: "尚未確認"
+        } as const;
 
         function exportCsv() {
           const rows = [
-            ["日期", "工作", "類型", "工時", "基本薪資", "獎金", "總收入", "已完成", "已領薪"],
+            ["日期", "工作", "類型", "工時", "基本薪資", "獎金", "預估", "實際", "狀態", "已領薪"],
             ...records.map((record) => [
               formatDateTime(record.date),
               data.jobs.find((job) => job.id === record.jobId)?.name ?? record.title,
@@ -54,8 +62,9 @@ export default function IncomePage() {
               record.hours.toFixed(1),
               Math.round(record.baseIncome).toString(),
               Math.round(record.bonus).toString(),
-              Math.round(record.totalIncome).toString(),
-              record.isCompleted ? "是" : "否",
+              Math.round(record.estimatedIncome).toString(),
+              Math.round(record.actualIncome).toString(),
+              statusLabel[record.status],
               record.isPaid ? "是" : "否"
             ])
           ];
@@ -88,12 +97,19 @@ export default function IncomePage() {
                         {job.name}
                       </option>
                     ))}
+                    {data.students.map((student) => (
+                      <option key={student.id} value={student.id}>
+                        {student.displayName || student.name}
+                      </option>
+                    ))}
                   </SelectInput>
                 </Field>
                 <Field label="狀態">
                   <SelectInput value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
                     <option value="all">全部</option>
                     <option value="completed">已完成</option>
+                    <option value="pending">尚未確認</option>
+                    <option value="cancelled">已取消</option>
                     <option value="paid">已領薪</option>
                     <option value="unpaid">尚未領薪</option>
                   </SelectInput>
@@ -106,22 +122,26 @@ export default function IncomePage() {
               </div>
             </Card>
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              <StatCard label="本月預估收入" value={money(summary.estimatedIncome)} hint={`${diff >= 0 ? "+" : ""}${money(diff)} 較上月`} />
+              <StatCard label="本月已完成收入" value={money(summary.actualCompletedIncome)} />
+              <StatCard label="本月取消損失" value={money(summary.cancellationLoss)} />
+              <StatCard label="尚未確認收入" value={money(summary.pendingIncome)} />
               <StatCard label="本月總工時" value={`${summary.totalHours.toFixed(1)} 小時`} />
-              <StatCard label="本月帳面薪資" value={money(summary.baseIncome)} />
-              <StatCard label="本月獎金" value={money(summary.bonusIncome)} />
-              <StatCard label="本月總收入" value={money(summary.totalIncome)} hint={`${diff >= 0 ? "+" : ""}${money(diff)} 較上月`} />
-              <StatCard label="已領薪收入" value={money(summary.paidIncome)} />
-              <StatCard label="尚未領薪收入" value={money(summary.unpaidIncome)} />
-              <StatCard label="平均時薪" value={money(summary.averageHourlyRate)} />
+              <StatCard label="實際完成工時" value={`${summary.completedHours.toFixed(1)} 小時`} />
+              <StatCard label="取消工時" value={`${summary.canceledHours.toFixed(1)} 小時`} />
+              <StatCard label="平均實際時薪" value={money(summary.actualAverageHourlyRate)} />
               <StatCard label="有效平均時薪" value={money(summary.effectiveAverageHourlyRate)} />
             </div>
             <div className="grid gap-5 xl:grid-cols-[0.8fr_1.2fr]">
               <Card>
-                <h3 className="mb-3 text-lg font-black">各工作收入</h3>
+                <h3 className="mb-3 text-lg font-black">各學生與工作收入</h3>
                 <div className="grid gap-2">
-                  {byJob.map((item) => (
-                    <div key={item.job} className="flex items-center justify-between rounded-lg bg-ink/5 p-3 text-sm dark:bg-white/10">
-                      <span className="font-bold">{item.job}</span>
+                  {bySource.map((item) => (
+                    <div key={item.id} className="flex items-center justify-between rounded-lg bg-ink/5 p-3 text-sm dark:bg-white/10">
+                      <span className="inline-flex items-center gap-2 font-bold">
+                        <span className="h-3 w-3 rounded-full" style={{ backgroundColor: item.color }} />
+                        {item.name}
+                      </span>
                       <span>{money(item.total)}</span>
                     </div>
                   ))}
@@ -138,6 +158,7 @@ export default function IncomePage() {
                       <th>工時</th>
                       <th>薪資</th>
                       <th>獎金</th>
+                      <th>取消損失</th>
                       <th>狀態</th>
                     </tr>
                   </thead>
@@ -148,9 +169,10 @@ export default function IncomePage() {
                         <td className="font-bold">{record.title}</td>
                         <td>{categoryMeta[record.category].label}</td>
                         <td>{record.hours.toFixed(1)}</td>
-                        <td>{money(record.totalIncome)}</td>
+                        <td>{money(record.actualIncome)}</td>
                         <td>{money(record.bonus)}</td>
-                        <td>{record.isPaid ? "已領薪" : record.isCompleted ? "已完成" : "預估"}</td>
+                        <td>{money(record.cancellationLoss)}</td>
+                        <td>{record.isPaid ? "已領薪" : statusLabel[record.status]}</td>
                       </tr>
                     ))}
                   </tbody>

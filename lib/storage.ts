@@ -1,5 +1,6 @@
 import type { AppData } from "@/types";
 import { sampleData } from "@/lib/sample-data";
+import { migrateAppData } from "@/lib/migrations";
 
 export const STORAGE_KEY = "unitime-app-data-v1";
 
@@ -11,9 +12,11 @@ export function loadAppData(): AppData {
     return sampleData;
   }
   try {
-    return { ...sampleData, ...JSON.parse(raw) };
+    const migrated = migrateAppData(JSON.parse(raw));
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated));
+    return migrated;
   } catch {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(sampleData));
+    window.localStorage.setItem(`${STORAGE_KEY}-backup-${Date.now()}`, raw);
     return sampleData;
   }
 }

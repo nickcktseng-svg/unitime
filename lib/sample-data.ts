@@ -1,5 +1,5 @@
 import { addDays, format } from "date-fns";
-import type { AppData, CalendarEvent, Course, Job, TutorStudent, UserSettings } from "@/types";
+import type { AppData, CalendarEvent, Course, Holiday, Job, Semester, TutorStudent, UserSettings } from "@/types";
 
 const today = new Date();
 const day = (offset: number) => format(addDays(today, offset), "yyyy-MM-dd");
@@ -56,7 +56,10 @@ export const sampleCourses: Course[] = [
     color: categoryMeta.course.color,
     notes: "每週小考",
     semesterStart: "2026-09-01",
-    semesterEnd: "2027-01-15"
+    semesterEnd: "2027-01-15",
+    semesterId: "semester-2026-fall",
+    excludeNationalHolidays: true,
+    excludeSchoolHolidays: true
   },
   {
     id: "course-pchem",
@@ -70,7 +73,10 @@ export const sampleCourses: Course[] = [
     color: "#0ea5e9",
     notes: "作業隔週交",
     semesterStart: "2026-09-01",
-    semesterEnd: "2027-01-15"
+    semesterEnd: "2027-01-15",
+    semesterId: "semester-2026-fall",
+    excludeNationalHolidays: true,
+    excludeSchoolHolidays: true
   },
   {
     id: "course-instrument",
@@ -84,7 +90,10 @@ export const sampleCourses: Course[] = [
     color: "#6366f1",
     notes: "需預習講義",
     semesterStart: "2026-09-01",
-    semesterEnd: "2027-01-15"
+    semesterEnd: "2027-01-15",
+    semesterId: "semester-2026-fall",
+    excludeNationalHolidays: true,
+    excludeSchoolHolidays: true
   },
   {
     id: "course-lab",
@@ -98,7 +107,44 @@ export const sampleCourses: Course[] = [
     color: categoryMeta.lab.color,
     notes: "穿實驗衣",
     semesterStart: "2026-09-01",
-    semesterEnd: "2027-01-15"
+    semesterEnd: "2027-01-15",
+    semesterId: "semester-2026-fall",
+    excludeNationalHolidays: true,
+    excludeSchoolHolidays: true
+  }
+];
+
+export const sampleSemesters: Semester[] = [
+  {
+    id: "semester-2026-fall",
+    name: "2026 學年度第一學期",
+    startDate: "2026-09-01",
+    endDate: "2027-01-15",
+    isCurrent: true,
+    classStartDate: "2026-09-14",
+    classEndDate: "2027-01-15",
+    notes: "示範學期，可在設定中修改"
+  }
+];
+
+export const sampleHolidays: Holiday[] = [
+  {
+    id: "holiday-mid-autumn",
+    date: "2026-09-25",
+    name: "中秋節",
+    type: "national",
+    cancelsClasses: true,
+    stopsFixedWork: false,
+    notes: "示範國定假日"
+  },
+  {
+    id: "holiday-school",
+    date: "2026-10-10",
+    name: "校內停課日",
+    type: "school",
+    cancelsClasses: true,
+    stopsFixedWork: false,
+    notes: "示範學校假日"
   }
 ];
 
@@ -112,6 +158,12 @@ export const sampleJobs: Job[] = [
     fixedHours: 5.5,
     reportBonus: 200,
     extraBonus: 0,
+    defaultDurationMinutes: 330,
+    defaultHourlyRate: 250,
+    scheduleMode: "irregular",
+    workOnNationalHolidays: false,
+    workOnSchoolHolidays: false,
+    defaultCancelOnHolidays: false,
     commuteMinutes: 15,
     prepMinutes: 0,
     reportMinutes: 30,
@@ -131,6 +183,12 @@ export const sampleJobs: Job[] = [
     fixedHours: 3,
     reportBonus: 0,
     extraBonus: 0,
+    defaultDurationMinutes: 180,
+    defaultHourlyRate: 450,
+    scheduleMode: "weekly",
+    workOnNationalHolidays: false,
+    workOnSchoolHolidays: false,
+    defaultCancelOnHolidays: false,
     commuteMinutes: 60,
     prepMinutes: 30,
     reportMinutes: 20,
@@ -157,6 +215,12 @@ export const sampleJobs: Job[] = [
     fixedHours: 2,
     reportBonus: 0,
     extraBonus: 0,
+    defaultDurationMinutes: 120,
+    defaultHourlyRate: 500,
+    scheduleMode: "weekly",
+    workOnNationalHolidays: false,
+    workOnSchoolHolidays: false,
+    defaultCancelOnHolidays: false,
     commuteMinutes: 40,
     prepMinutes: 30,
     reportMinutes: 15,
@@ -183,6 +247,12 @@ export const sampleJobs: Job[] = [
     fixedHours: 3,
     reportBonus: 0,
     extraBonus: 0,
+    defaultDurationMinutes: 180,
+    defaultHourlyRate: 230,
+    scheduleMode: "irregular",
+    workOnNationalHolidays: false,
+    workOnSchoolHolidays: false,
+    defaultCancelOnHolidays: false,
     commuteMinutes: 35,
     prepMinutes: 0,
     reportMinutes: 0,
@@ -202,6 +272,12 @@ export const sampleJobs: Job[] = [
     fixedHours: 2,
     reportBonus: 10,
     extraBonus: 0,
+    defaultDurationMinutes: 120,
+    defaultHourlyRate: 220,
+    scheduleMode: "weekly",
+    workOnNationalHolidays: false,
+    workOnSchoolHolidays: false,
+    defaultCancelOnHolidays: false,
     commuteMinutes: 0,
     prepMinutes: 20,
     reportMinutes: 10,
@@ -218,10 +294,23 @@ export const sampleStudents: TutorStudent[] = [
   {
     id: "student-zhou",
     name: "周家兄妹",
+    displayName: "周家",
     grade: "國二 / 小六",
     subject: "數學",
     weeklySchedule: "週三 18:30-21:30",
     hourlyRate: 450,
+    defaultHourlyRate: 450,
+    defaultDurationMinutes: 180,
+    color: "#ef4444",
+    isActive: true,
+    scheduleMode: "weekly",
+    scheduleWeekday: 3,
+    scheduleStartTime: "18:30",
+    scheduleEndTime: "21:30",
+    scheduleEffectiveDate: "2026-09-01",
+    scheduleEndDate: "2027-01-15",
+    excludeNationalHolidays: false,
+    excludeSchoolHolidays: false,
     parentContact: "LINE",
     learningGoal: "穩定段考 85 分以上",
     materials: "翰林講義、自編練習",
@@ -251,10 +340,23 @@ export const sampleStudents: TutorStudent[] = [
   {
     id: "student-li",
     name: "李宥辰",
+    displayName: "宥辰",
     grade: "國三",
     subject: "數學",
     weeklySchedule: "週二 19:00-21:00",
     hourlyRate: 500,
+    defaultHourlyRate: 500,
+    defaultDurationMinutes: 120,
+    color: "#dc2626",
+    isActive: true,
+    scheduleMode: "irregular",
+    scheduleWeekday: 2,
+    scheduleStartTime: "19:00",
+    scheduleEndTime: "21:00",
+    scheduleEffectiveDate: "2026-09-01",
+    scheduleEndDate: "2027-01-15",
+    excludeNationalHolidays: false,
+    excludeSchoolHolidays: false,
     parentContact: "電話",
     learningGoal: "會考 A",
     materials: "康軒數學第三冊、歷屆試題",
@@ -294,6 +396,10 @@ export const sampleEvents: CalendarEvent[] = [
     notes: "小考複習",
     repeatRule: { enabled: true, weekdays: [1], startDate: "2026-09-01", endDate: "2027-01-15" },
     countsForIncome: false,
+    courseId: "course-organic",
+    semesterId: "semester-2026-fall",
+    status: "scheduled",
+    color: categoryMeta.course.color,
     isCompleted: false,
     isPaid: false
   },
@@ -308,7 +414,11 @@ export const sampleEvents: CalendarEvent[] = [
     countsForIncome: true,
     hourlyRate: 250,
     bonus: 200,
+    bonusEligible: true,
+    bonusReceived: true,
     jobId: "job-lab",
+    status: "completed",
+    color: categoryMeta.lab.color,
     isCompleted: true,
     isPaid: false,
     payday: day(7)
@@ -324,8 +434,12 @@ export const sampleEvents: CalendarEvent[] = [
     countsForIncome: true,
     hourlyRate: 450,
     bonus: 0,
+    bonusEligible: false,
+    bonusReceived: false,
     jobId: "job-xinzhuang",
     studentId: "student-zhou",
+    status: "scheduled",
+    color: "#ef4444",
     isCompleted: false,
     isPaid: false,
     payday: day(14)
@@ -342,6 +456,8 @@ export const sampleEvents: CalendarEvent[] = [
     hourlyRate: 500,
     jobId: "job-junior-math",
     studentId: "student-li",
+    status: "scheduled",
+    color: "#dc2626",
     isCompleted: false,
     isPaid: false,
     payday: day(12)
@@ -357,6 +473,8 @@ export const sampleEvents: CalendarEvent[] = [
     countsForIncome: true,
     hourlyRate: 230,
     jobId: "job-cram",
+    status: "scheduled",
+    color: categoryMeta.cram_school.color,
     isCompleted: false,
     isPaid: false,
     payday: day(18)
@@ -370,15 +488,19 @@ export const sampleEvents: CalendarEvent[] = [
     location: "圖書館",
     notes: "整理數據",
     countsForIncome: false,
+    status: "scheduled",
     isCompleted: false,
     isPaid: false
   }
 ];
 
 export const sampleData: AppData = {
+  storageVersion: 2,
   events: sampleEvents,
   courses: sampleCourses,
   jobs: sampleJobs,
   students: sampleStudents,
+  semesters: sampleSemesters,
+  holidays: sampleHolidays,
   settings: defaultSettings
 };

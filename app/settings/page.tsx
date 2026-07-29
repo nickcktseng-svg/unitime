@@ -1,16 +1,53 @@
 "use client";
 
+import { format } from "date-fns";
 import { Download, Upload } from "lucide-react";
 import { useRef, useState } from "react";
 import { AppShell } from "@/components/layout/AppShell";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Field, SelectInput, TextArea, TextInput } from "@/components/ui/Field";
-import type { AppData, UserSettings } from "@/types";
+import type { AppData, Holiday, HolidayType, Semester, UserSettings } from "@/types";
+
+const today = format(new Date(), "yyyy-MM-dd");
+
+function emptySemester(id: string): Semester {
+  return {
+    id,
+    name: "",
+    startDate: today,
+    endDate: today,
+    isCurrent: false,
+    classStartDate: today,
+    classEndDate: today,
+    notes: ""
+  };
+}
+
+function emptyHoliday(id: string): Holiday {
+  return {
+    id,
+    date: today,
+    name: "",
+    type: "custom_stop",
+    cancelsClasses: true,
+    stopsFixedWork: false,
+    notes: ""
+  };
+}
+
+const holidayTypeLabels: Record<HolidayType, string> = {
+  national: "國定假日",
+  school: "學校假日",
+  custom_stop: "自訂停課日",
+  makeup: "補課日"
+};
 
 export default function SettingsPage() {
   const fileRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState("");
+  const [semesterDraft, setSemesterDraft] = useState<Semester | undefined>();
+  const [holidayDraft, setHolidayDraft] = useState<Holiday | undefined>();
 
   return (
     <AppShell>
@@ -111,7 +148,7 @@ export default function SettingsPage() {
                 <Field label="預設備課時間 分鐘">
                   <TextInput min={0} type="number" value={settings.defaultPrepMinutes} onChange={(event) => update("defaultPrepMinutes", Number(event.target.value))} />
                 </Field>
-                <Field label="預設家教回報時間 分鐘">
+                <Field label="預設完成紀錄時間 分鐘">
                   <TextInput min={0} type="number" value={settings.defaultReportMinutes} onChange={(event) => update("defaultReportMinutes", Number(event.target.value))} />
                 </Field>
               </div>
@@ -128,7 +165,7 @@ export default function SettingsPage() {
                   ["includeClassTimeInEffectiveRate", "包含上課時間"],
                   ["includePrepTimeInEffectiveRate", "包含備課時間"],
                   ["includeCommuteTimeInEffectiveRate", "包含通勤時間"],
-                  ["includeReportTimeInEffectiveRate", "包含課後回報時間"]
+                  ["includeReportTimeInEffectiveRate", "包含完成紀錄時間"]
                 ].map(([key, label]) => (
                   <label key={key} className="flex items-center gap-2 rounded-lg bg-ink/5 p-3 text-sm font-bold dark:bg-white/10">
                     <input
@@ -138,6 +175,180 @@ export default function SettingsPage() {
                     />
                     {label}
                   </label>
+                ))}
+              </div>
+            </Card>
+            <Card>
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+                <h3 className="text-lg font-black">學期管理</h3>
+                <Button variant="secondary" onClick={() => setSemesterDraft(emptySemester(actions.makeId("semester")))}>
+                  新增學期
+                </Button>
+              </div>
+              {semesterDraft ? (
+                <div className="mb-4 grid gap-4 rounded-lg bg-ink/5 p-3 md:grid-cols-3 dark:bg-white/10">
+                  <Field label="學期名稱">
+                    <TextInput value={semesterDraft.name} onChange={(event) => setSemesterDraft({ ...semesterDraft, name: event.target.value })} />
+                  </Field>
+                  <Field label="學期開始">
+                    <TextInput type="date" value={semesterDraft.startDate} onChange={(event) => setSemesterDraft({ ...semesterDraft, startDate: event.target.value })} />
+                  </Field>
+                  <Field label="學期結束">
+                    <TextInput type="date" value={semesterDraft.endDate} onChange={(event) => setSemesterDraft({ ...semesterDraft, endDate: event.target.value })} />
+                  </Field>
+                  <Field label="上課開始">
+                    <TextInput
+                      type="date"
+                      value={semesterDraft.classStartDate}
+                      onChange={(event) => setSemesterDraft({ ...semesterDraft, classStartDate: event.target.value })}
+                    />
+                  </Field>
+                  <Field label="上課結束">
+                    <TextInput
+                      type="date"
+                      value={semesterDraft.classEndDate}
+                      onChange={(event) => setSemesterDraft({ ...semesterDraft, classEndDate: event.target.value })}
+                    />
+                  </Field>
+                  <label className="flex items-center gap-2 text-sm font-bold">
+                    <input
+                      type="checkbox"
+                      checked={semesterDraft.isCurrent}
+                      onChange={(event) => setSemesterDraft({ ...semesterDraft, isCurrent: event.target.checked })}
+                    />
+                    目前學期
+                  </label>
+                  <div className="md:col-span-3">
+                    <Field label="備註">
+                      <TextArea value={semesterDraft.notes} onChange={(event) => setSemesterDraft({ ...semesterDraft, notes: event.target.value })} />
+                    </Field>
+                  </div>
+                  <div className="flex gap-2 md:col-span-3">
+                    <Button
+                      type="button"
+                      onClick={() => {
+                        if (!semesterDraft.name.trim()) return setError("請輸入學期名稱");
+                        actions.upsertSemester(semesterDraft);
+                        setSemesterDraft(undefined);
+                        setError("");
+                      }}
+                    >
+                      儲存學期
+                    </Button>
+                    <Button type="button" variant="secondary" onClick={() => setSemesterDraft(undefined)}>
+                      取消
+                    </Button>
+                  </div>
+                </div>
+              ) : null}
+              <div className="grid gap-2">
+                {data.semesters.map((semester) => (
+                  <div key={semester.id} className="flex flex-wrap items-center gap-3 rounded-lg bg-white p-3 text-sm dark:bg-black/20">
+                    <b>{semester.name}</b>
+                    <span className="text-ink/60 dark:text-white/60">
+                      {semester.classStartDate} 至 {semester.classEndDate}
+                    </span>
+                    {semester.isCurrent ? <span className="rounded-lg bg-mint/15 px-2 py-1 text-xs font-bold text-emerald-700">目前</span> : null}
+                    <div className="ml-auto flex gap-2">
+                      <Button type="button" variant="ghost" onClick={() => setSemesterDraft(semester)}>
+                        編輯
+                      </Button>
+                      <Button type="button" variant="ghost" onClick={() => actions.deleteSemester(semester.id)}>
+                        刪除
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </Card>
+            <Card>
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+                <h3 className="text-lg font-black">假日管理</h3>
+                <Button variant="secondary" onClick={() => setHolidayDraft(emptyHoliday(actions.makeId("holiday")))}>
+                  新增假日
+                </Button>
+              </div>
+              {holidayDraft ? (
+                <div className="mb-4 grid gap-4 rounded-lg bg-ink/5 p-3 md:grid-cols-3 dark:bg-white/10">
+                  <Field label="名稱">
+                    <TextInput value={holidayDraft.name} onChange={(event) => setHolidayDraft({ ...holidayDraft, name: event.target.value })} />
+                  </Field>
+                  <Field label="開始日期">
+                    <TextInput type="date" value={holidayDraft.date} onChange={(event) => setHolidayDraft({ ...holidayDraft, date: event.target.value })} />
+                  </Field>
+                  <Field label="結束日期 可選">
+                    <TextInput
+                      type="date"
+                      value={holidayDraft.endDate ?? ""}
+                      onChange={(event) => setHolidayDraft({ ...holidayDraft, endDate: event.target.value || undefined })}
+                    />
+                  </Field>
+                  <Field label="類型">
+                    <SelectInput value={holidayDraft.type} onChange={(event) => setHolidayDraft({ ...holidayDraft, type: event.target.value as HolidayType })}>
+                      {Object.entries(holidayTypeLabels).map(([value, label]) => (
+                        <option key={value} value={value}>
+                          {label}
+                        </option>
+                      ))}
+                    </SelectInput>
+                  </Field>
+                  <label className="flex items-center gap-2 text-sm font-bold">
+                    <input
+                      type="checkbox"
+                      checked={holidayDraft.cancelsClasses}
+                      onChange={(event) => setHolidayDraft({ ...holidayDraft, cancelsClasses: event.target.checked })}
+                    />
+                    停課
+                  </label>
+                  <label className="flex items-center gap-2 text-sm font-bold">
+                    <input
+                      type="checkbox"
+                      checked={holidayDraft.stopsFixedWork}
+                      onChange={(event) => setHolidayDraft({ ...holidayDraft, stopsFixedWork: event.target.checked })}
+                    />
+                    停止固定工作
+                  </label>
+                  <div className="md:col-span-3">
+                    <Field label="備註">
+                      <TextArea value={holidayDraft.notes} onChange={(event) => setHolidayDraft({ ...holidayDraft, notes: event.target.value })} />
+                    </Field>
+                  </div>
+                  <div className="flex gap-2 md:col-span-3">
+                    <Button
+                      type="button"
+                      onClick={() => {
+                        if (!holidayDraft.name.trim()) return setError("請輸入假日名稱");
+                        actions.upsertHoliday(holidayDraft);
+                        setHolidayDraft(undefined);
+                        setError("");
+                      }}
+                    >
+                      儲存假日
+                    </Button>
+                    <Button type="button" variant="secondary" onClick={() => setHolidayDraft(undefined)}>
+                      取消
+                    </Button>
+                  </div>
+                </div>
+              ) : null}
+              <div className="grid gap-2">
+                {data.holidays.map((holiday) => (
+                  <div key={holiday.id} className="flex flex-wrap items-center gap-3 rounded-lg bg-white p-3 text-sm dark:bg-black/20">
+                    <b>{holiday.name}</b>
+                    <span>{holidayTypeLabels[holiday.type]}</span>
+                    <span className="text-ink/60 dark:text-white/60">
+                      {holiday.date}{holiday.endDate ? ` 至 ${holiday.endDate}` : ""}
+                    </span>
+                    {holiday.cancelsClasses ? <span className="rounded-lg bg-amber-100 px-2 py-1 text-xs font-bold text-amber-700">停課</span> : null}
+                    <div className="ml-auto flex gap-2">
+                      <Button type="button" variant="ghost" onClick={() => setHolidayDraft(holiday)}>
+                        編輯
+                      </Button>
+                      <Button type="button" variant="ghost" onClick={() => actions.deleteHoliday(holiday.id)}>
+                        刪除
+                      </Button>
+                    </div>
+                  </div>
                 ))}
               </div>
             </Card>

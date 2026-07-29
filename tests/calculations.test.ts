@@ -20,7 +20,10 @@ const event: CalendarEvent = {
   countsForIncome: true,
   hourlyRate: 500,
   bonus: 100,
+  bonusEligible: true,
+  bonusReceived: true,
   jobId: "j1",
+  status: "completed",
   isCompleted: true,
   isPaid: false
 };

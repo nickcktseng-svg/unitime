@@ -3,17 +3,20 @@
 import { endOfWeek, format, isAfter, isBefore, parseISO, startOfWeek } from "date-fns";
 import { Bar, BarChart, CartesianGrid, Cell, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Banknote, BriefcaseBusiness, CalendarClock, GraduationCap } from "lucide-react";
+import { useState } from "react";
 import { AppShell } from "@/components/layout/AppShell";
 import { Card } from "@/components/ui/Card";
 import { StatCard } from "@/components/ui/StatCard";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { currentMonth, durationHours, formatTime, isSameMonthString } from "@/lib/date-utils";
-import { calculateMonthlyIncome, groupIncomeByJob, groupIncomeByMonth } from "@/lib/calculations";
+import { currentMonth, durationHours, formatTime } from "@/lib/date-utils";
+import { calculateMonthlyIncome, groupIncomeByMonth, groupIncomeBySource } from "@/lib/calculations";
 import { categoryMeta } from "@/lib/sample-data";
 
 const money = (value: number) => `NT$ ${Math.round(value).toLocaleString()}`;
 
 export default function DashboardPage() {
+  const [pieMode, setPieMode] = useState<"estimated" | "actual">("actual");
+
   return (
     <AppShell>
       {({ data }) => {
@@ -56,39 +59,16 @@ export default function DashboardPage() {
             .reduce((sum, event) => sum + durationHours(event.start, event.end), 0)
         }));
         const monthlyTrend = Object.entries(
-          groupIncomeByMonth(
-            data.events
-              .filter((event) => event.countsForIncome)
-              .map((event) => ({
-                eventId: event.id,
-                title: event.title,
-                date: event.start,
-                jobId: event.jobId,
-                studentId: event.studentId,
-                category: event.category,
-                hours: durationHours(event.start, event.end),
-                baseIncome: 0,
-                bonus: 0,
-                totalIncome: isSameMonthString(event.start, currentMonth())
-                  ? income.records.find((record) => record.eventId === event.id)?.totalIncome ?? 0
-                  : 0,
-                effectiveHours: 0,
-                isCompleted: event.isCompleted,
-                isPaid: event.isPaid
-              }))
-          )
+          groupIncomeByMonth(income.records)
         ).map(([month, total]) => ({ month, total }));
-        const byJob = Object.entries(groupIncomeByJob(income.records)).map(([jobId, total]) => ({
-          name: data.jobs.find((job) => job.id === jobId)?.name ?? "未分類",
-          total
-        }));
+        const pieData = Object.values(groupIncomeBySource(income.records, data.jobs, data.students, pieMode)).filter((item) => item.total > 0);
 
         return (
           <div className="grid gap-5">
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
               <StatCard label="本週總課堂時間" value={`${courseHours.toFixed(1)} 小時`} icon={<GraduationCap size={20} />} />
               <StatCard label="本週總工作時間" value={`${workHours.toFixed(1)} 小時`} icon={<BriefcaseBusiness size={20} />} />
-              <StatCard label="本月預估薪資" value={money(income.totalIncome)} icon={<Banknote size={20} />} />
+              <StatCard label="本月預估薪資" value={money(income.estimatedIncome)} icon={<Banknote size={20} />} />
               <StatCard label="尚未領取薪資" value={money(income.unpaidIncome)} hint={`已完成 ${money(income.completedIncome)}`} icon={<CalendarClock size={20} />} />
             </div>
             <div className="grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
@@ -152,18 +132,52 @@ export default function DashboardPage() {
                 </div>
               </Card>
               <Card>
-                <h2 className="mb-3 text-lg font-black">工作類型收入</h2>
+                <div className="mb-3 flex items-center justify-between gap-2">
+                  <h2 className="text-lg font-black">學生與工作收入</h2>
+                  <div className="flex rounded-lg bg-ink/5 p-1 text-xs font-bold dark:bg-white/10">
+                    <button
+                      className={`rounded-md px-2 py-1 ${pieMode === "actual" ? "bg-white dark:bg-black/30" : ""}`}
+                      onClick={() => setPieMode("actual")}
+                    >
+                      實際
+                    </button>
+                    <button
+                      className={`rounded-md px-2 py-1 ${pieMode === "estimated" ? "bg-white dark:bg-black/30" : ""}`}
+                      onClick={() => setPieMode("estimated")}
+                    >
+                      預估
+                    </button>
+                  </div>
+                </div>
                 <div className="h-72">
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
-                      <Pie data={byJob} dataKey="total" nameKey="name" outerRadius={90} label>
-                        {byJob.map((_, index) => (
-                          <Cell key={index} fill={["#42b883", "#f26b5e", "#f2b84b", "#2563eb", "#8b5cf6"][index % 5]} />
+                      <Pie data={pieData} dataKey="total" nameKey="name" outerRadius={90} label>
+                        {pieData.map((item) => (
+                          <Cell key={item.id} fill={item.color} />
                         ))}
                       </Pie>
-                      <Tooltip />
+                      <Tooltip
+                        formatter={(value, _, item) => {
+                          const total = pieData.reduce((sum, entry) => sum + entry.total, 0);
+                          const entry = item.payload as { hours: number; total: number };
+                          const percent = total > 0 ? `${Math.round((entry.total / total) * 100)}%` : "0%";
+                          return [`${money(Number(value))} / ${entry.hours.toFixed(1)} 小時 / ${percent}`, "收入"];
+                        }}
+                      />
                     </PieChart>
                   </ResponsiveContainer>
+                </div>
+                <div className="mt-2 grid gap-1 text-xs">
+                  {pieData.map((item) => (
+                    <div key={item.id} className="flex items-center justify-between gap-2">
+                      <span className="inline-flex items-center gap-2">
+                        <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: item.color }} />
+                        {item.name}
+                      </span>
+                      <span>{money(item.total)}</span>
+                    </div>
+                  ))}
                 </div>
               </Card>
               <Card className="xl:col-span-3">

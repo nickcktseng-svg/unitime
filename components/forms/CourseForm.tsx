@@ -1,18 +1,20 @@
 "use client";
 
 import { useState } from "react";
-import type { Course } from "@/types";
+import type { Course, Semester } from "@/types";
 import { weekdayNames } from "@/lib/date-utils";
 import { Button } from "@/components/ui/Button";
 import { Field, TextArea, TextInput } from "@/components/ui/Field";
 
 export function CourseForm({
   course,
+  semesters,
   makeId,
   onSave,
   onCancel
 }: {
   course?: Course;
+  semesters: Semester[];
   makeId: (prefix: string) => string;
   onSave: (course: Course) => void;
   onCancel: () => void;
@@ -30,7 +32,10 @@ export function CourseForm({
       color: "#2563eb",
       notes: "",
       semesterStart: "2026-09-01",
-      semesterEnd: "2027-01-15"
+      semesterEnd: "2027-01-15",
+      semesterId: semesters.find((semester) => semester.isCurrent)?.id ?? semesters[0]?.id,
+      excludeNationalHolidays: true,
+      excludeSchoolHolidays: true
     }
   );
   const [error, setError] = useState("");
@@ -38,7 +43,12 @@ export function CourseForm({
   function save() {
     if (!draft.name.trim()) return setError("請輸入課程名稱");
     if (draft.endTime <= draft.startTime) return setError("結束時間必須晚於開始時間");
-    onSave(draft);
+    const semester = semesters.find((item) => item.id === draft.semesterId);
+    onSave({
+      ...draft,
+      semesterStart: semester?.classStartDate ?? draft.semesterStart,
+      semesterEnd: semester?.classEndDate ?? draft.semesterEnd
+    });
   }
 
   return (
@@ -90,6 +100,28 @@ export function CourseForm({
         <Field label="課程顏色">
           <TextInput type="color" value={draft.color} onChange={(event) => setDraft({ ...draft, color: event.target.value })} />
         </Field>
+        <Field label="所屬學期">
+          <select
+            className="min-h-10 rounded-lg border border-ink/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-black/20"
+            value={draft.semesterId ?? ""}
+            onChange={(event) => {
+              const semester = semesters.find((item) => item.id === event.target.value);
+              setDraft({
+                ...draft,
+                semesterId: event.target.value || undefined,
+                semesterStart: semester?.classStartDate ?? draft.semesterStart,
+                semesterEnd: semester?.classEndDate ?? draft.semesterEnd
+              });
+            }}
+          >
+            <option value="">未指定</option>
+            {semesters.map((semester) => (
+              <option key={semester.id} value={semester.id}>
+                {semester.name}
+              </option>
+            ))}
+          </select>
+        </Field>
         <Field label="學期開始日期">
           <TextInput
             type="date"
@@ -104,6 +136,24 @@ export function CourseForm({
             onChange={(event) => setDraft({ ...draft, semesterEnd: event.target.value })}
           />
         </Field>
+      </div>
+      <div className="grid gap-2 rounded-lg bg-ink/5 p-3 text-sm font-bold sm:grid-cols-2 dark:bg-white/10">
+        <label className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            checked={draft.excludeNationalHolidays ?? true}
+            onChange={(event) => setDraft({ ...draft, excludeNationalHolidays: event.target.checked })}
+          />
+          國定假日停課
+        </label>
+        <label className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            checked={draft.excludeSchoolHolidays ?? true}
+            onChange={(event) => setDraft({ ...draft, excludeSchoolHolidays: event.target.checked })}
+          />
+          學校假日停課
+        </label>
       </div>
       <Field label="備註">
         <TextArea value={draft.notes} onChange={(event) => setDraft({ ...draft, notes: event.target.value })} />
