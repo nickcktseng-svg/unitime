@@ -63,7 +63,7 @@ export function StudentForm({
   const [error, setError] = useState("");
 
   function save() {
-    if (!draft.name.trim()) return setError("請輸入學生名稱");
+    if (!draft.name.trim()) return setError("請輸入家教對象名稱");
     onSave({
       ...draft,
       displayName: draft.displayName?.trim() || draft.name,
@@ -82,7 +82,7 @@ export function StudentForm({
     >
       {error ? <div className="rounded-lg bg-red-50 p-3 text-sm font-bold text-red-700">{error}</div> : null}
       <div className="grid gap-4 md:grid-cols-2">
-        <Field label="學生名稱">
+        <Field label="家教對象名稱">
           <TextInput value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} />
         </Field>
         <Field label="暱稱或顯示名稱 可選">
@@ -141,7 +141,7 @@ export function StudentForm({
         ) : null}
         <label className="flex items-center gap-2 text-sm font-bold">
           <input type="checkbox" checked={draft.isActive ?? true} onChange={(event) => setDraft({ ...draft, isActive: event.target.checked })} />
-          仍在上課
+          仍在進行
         </label>
       </div>
       <Field label="備註 可選">
@@ -151,7 +151,7 @@ export function StudentForm({
         <Button type="button" variant="secondary" onClick={onCancel}>
           取消
         </Button>
-        <Button type="submit">儲存學生</Button>
+        <Button type="submit">儲存家教</Button>
       </div>
     </form>
   );

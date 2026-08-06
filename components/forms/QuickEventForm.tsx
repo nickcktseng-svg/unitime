@@ -13,7 +13,7 @@ import {
   quickTargets
 } from "@/lib/quick-schedule";
 
-type QuickMode = "landing" | "student" | "job" | "event";
+type QuickMode = "landing" | "work" | "event";
 
 function emptyEvent(makeId: (prefix: string) => string, category: EventCategory, startValue?: string): CalendarEvent {
   const start = startValue?.includes("T") ? startValue.slice(0, 19) : `${startValue ?? new Date().toISOString().slice(0, 10)}T09:00:00`;
@@ -109,12 +109,9 @@ export function QuickEventForm({
 
   return (
     <div className="grid gap-4 pb-2">
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
-        <Button type="button" variant={mode === "student" ? "primary" : "secondary"} onClick={() => setMode("student")}>
-          已設定學生
-        </Button>
-        <Button type="button" variant={mode === "job" ? "primary" : "secondary"} onClick={() => setMode("job")}>
-          已設定工作
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <Button type="button" variant={mode === "work" ? "primary" : "secondary"} onClick={() => setMode("work")}>
+          工作
         </Button>
         <Button type="button" variant="secondary" onClick={() => pickSimple("course")}>
           大學課程
@@ -148,14 +145,14 @@ export function QuickEventForm({
           </div>
         </div>
       ) : null}
-      <Field label="搜尋學生或工作">
+      <Field label="搜尋工作或家教">
         <div className="relative">
           <Search className="pointer-events-none absolute left-3 top-2.5 text-ink/40" size={17} />
           <TextInput className="pl-9" value={query} onChange={(event) => setQuery(event.target.value)} />
         </div>
       </Field>
       <div className="grid gap-2">
-        {(mode === "student" ? filteredTargets.filter((target) => target.kind === "student") : mode === "job" ? filteredTargets.filter((target) => target.kind === "job") : filteredTargets).map((target) => (
+        {filteredTargets.map((target) => (
           <div key={`${target.kind}-${target.id}`} className="flex items-center gap-2 rounded-lg bg-ink/5 p-2 dark:bg-white/10">
             <button
               type="button"
@@ -181,8 +178,7 @@ export function QuickEventForm({
             </Button>
           </div>
         ))}
-        {mode === "job" && jobs.length === 0 ? <p className="text-sm text-ink/60 dark:text-white/60">尚未建立工作。</p> : null}
-        {mode === "student" && students.length === 0 ? <p className="text-sm text-ink/60 dark:text-white/60">尚未建立學生。</p> : null}
+        {jobs.length === 0 && students.length === 0 ? <p className="text-sm text-ink/60 dark:text-white/60">尚未建立工作或家教。</p> : null}
       </div>
     </div>
   );

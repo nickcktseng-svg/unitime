@@ -11,8 +11,7 @@ import {
   Menu,
   Moon,
   Settings,
-  Sun,
-  Users
+  Sun
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { useAppData } from "@/hooks/useAppData";
@@ -25,7 +24,6 @@ const navItems = [
   { href: "/calendar", label: "行事曆", icon: CalendarDays },
   { href: "/courses", label: "課表", icon: GraduationCap },
   { href: "/jobs", label: "工作", icon: BriefcaseBusiness },
-  { href: "/students", label: "學生", icon: Users },
   { href: "/income", label: "薪資", icon: BarChart3 },
   { href: "/settings", label: "設定", icon: Settings }
 ];
@@ -116,7 +114,7 @@ export function AppShell({ children }: { children: (context: ReturnType<typeof u
         </header>
         <div className="mx-auto max-w-7xl p-4 sm:p-6">{children(appData)}</div>
       </main>
-      <nav className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-7 border-t border-ink/10 bg-white/95 px-2 py-2 backdrop-blur dark:border-white/10 dark:bg-[#111817]/95 lg:hidden">
+      <nav className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-6 border-t border-ink/10 bg-white/95 px-2 py-2 backdrop-blur dark:border-white/10 dark:bg-[#111817]/95 lg:hidden">
         {navItems.map((item) => {
           const Icon = item.icon;
           const active = pathname.startsWith(item.href);

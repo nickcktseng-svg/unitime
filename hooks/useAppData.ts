@@ -142,14 +142,14 @@ export function useAppData() {
             ? current.students.map((item) => (item.id === student.id ? student : item))
             : [...current.students, student]
         }));
-        notify("學生資料已儲存");
+        notify("家教資料已儲存");
       },
       toggleStudentPinned(id: string) {
         setData((current) => ({
           ...current,
           students: current.students.map((student) => (student.id === id ? { ...student, isPinned: !student.isPinned } : student))
         }));
-        notify("常用學生已更新");
+        notify("常用家教已更新");
       },
       updateSettings(settings: UserSettings) {
         setData((current) => ({ ...current, settings }));

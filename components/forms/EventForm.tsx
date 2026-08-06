@@ -165,6 +165,7 @@ export function EventForm({
   const [error, setError] = useState("");
   const selectedJob = jobs.find((job) => job.id === draft.jobId);
   const selectedStudent = students.find((student) => student.id === draft.studentId);
+  const selectedWorkTarget = draft.studentId ? `student:${draft.studentId}` : draft.jobId ? `job:${draft.jobId}` : "";
   const cancellationType = cancelStatuses.includes(draft.status) ? draft.status as CalendarEvent["cancellationType"] : undefined;
 
   const nextEvent: CalendarEvent = useMemo(
@@ -308,6 +309,19 @@ export function EventForm({
     );
   }
 
+  function updateWorkTarget(value: string) {
+    if (!value) {
+      setDraft({ ...draft, jobId: "", studentId: "" });
+      return;
+    }
+    const [kind, id] = value.split(":");
+    if (kind === "student") {
+      updateStudent(id);
+      return;
+    }
+    updateJob(id);
+  }
+
   function save() {
     if (!draft.title.trim()) {
       setError("請輸入事件名稱");
@@ -437,24 +451,27 @@ export function EventForm({
         <Field label="地點">
           <TextInput value={draft.location} onChange={(event) => syncBaseFromDate({ ...draft, location: event.target.value })} />
         </Field>
-        <Field label="關聯工作">
-          <SelectInput value={draft.jobId} onChange={(event) => updateJob(event.target.value)}>
+        <Field label="關聯工作項目">
+          <SelectInput value={selectedWorkTarget} onChange={(event) => updateWorkTarget(event.target.value)}>
             <option value="">無</option>
-            {jobs.map((job) => (
-              <option key={job.id} value={job.id}>
-                {job.name}
-              </option>
-            ))}
-          </SelectInput>
-        </Field>
-        <Field label="關聯學生">
-          <SelectInput value={draft.studentId} onChange={(event) => updateStudent(event.target.value)}>
-            <option value="">無</option>
-            {students.map((student) => (
-              <option key={student.id} value={student.id}>
-                {student.name}
-              </option>
-            ))}
+            {students.length ? (
+              <optgroup label="家教">
+                {students.map((student) => (
+                  <option key={student.id} value={`student:${student.id}`}>
+                    {student.displayName || student.name}
+                  </option>
+                ))}
+              </optgroup>
+            ) : null}
+            {jobs.length ? (
+              <optgroup label="工作">
+                {jobs.map((job) => (
+                  <option key={job.id} value={`job:${job.id}`}>
+                    {job.name}
+                  </option>
+                ))}
+              </optgroup>
+            ) : null}
           </SelectInput>
         </Field>
       </div>

@@ -128,7 +128,7 @@ export function quickTargets(students: TutorStudent[], jobs: Job[]): QuickTarget
       kind: "student" as const,
       id: student.id,
       name: student.displayName || student.name,
-      typeLabel: "家教學生",
+      typeLabel: "家教",
       color: student.color ?? "#ef4444",
       hourlyRate: student.defaultHourlyRate ?? student.hourlyRate,
       durationMinutes: student.defaultDurationMinutes ?? 120,
